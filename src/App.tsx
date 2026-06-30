@@ -47,7 +47,7 @@ export default function App() {
     today.setHours(0, 0, 0, 0);
 
     const updatedIntegrados = integrados.map(i => {
-      if (i.status === 'Em andamento') {
+      if (i.status === 'Em andamento' && i.alojamentoDate) {
         const [year, month, day] = i.alojamentoDate.split('-');
         const alojamento = new Date(Number(year), Number(month) - 1, Number(day));
         

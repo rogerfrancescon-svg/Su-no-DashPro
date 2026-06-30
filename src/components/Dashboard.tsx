@@ -120,7 +120,8 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
       const integrado = filteredIntegrados.find(i => i.id === v.integradoId);
       const expected = getExpectedConsumption(v.idade);
       
-      const abbreviateName = (name: string) => {
+      const abbreviateName = (name?: string) => {
+        if (!name) return 'Desconhecido';
         const parts = name.trim().split(' ');
         if (parts.length > 1) {
           return `${parts[0]} ${parts[parts.length - 1][0]}.`;
@@ -310,7 +311,8 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
                   { value: 'Curva Alvo', type: 'circle', id: 'consumoEsperado', color: '#94a3b8' },
                   ...filteredIntegrados.map((integrado, index) => {
                     const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
-                    const abbreviateName = (name: string) => {
+                    const abbreviateName = (name?: string) => {
+                      if (!name) return 'Desconhecido';
                       const parts = name.trim().split(' ');
                       if (parts.length > 1) {
                         return `${parts[0]} ${parts[parts.length - 1][0]}.`;
@@ -330,7 +332,8 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
               {filteredIntegrados.map((integrado, index) => {
                 const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
                 
-                const abbreviateName = (name: string) => {
+                const abbreviateName = (name?: string) => {
+                  if (!name) return 'Desconhecido';
                   const parts = name.trim().split(' ');
                   if (parts.length > 1) {
                     return `${parts[0]} ${parts[parts.length - 1][0]}.`;
