@@ -177,13 +177,10 @@ export default function App() {
             {isIntegradoFormOpen && (
               <div className="mb-8">
                 <IntegradoForm 
-                  onSave={async (i) => {
-                    await fetch('/api/integrados', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(i)
-                    });
-                    await loadData();
+                  onSave={(i) => {
+                    const newIntegrados = [...integrados, i];
+                    setIntegrados(newIntegrados);
+                    storage.saveIntegrados(newIntegrados);
                     setIsIntegradoFormOpen(false);
                   }}
                   onCancel={() => setIsIntegradoFormOpen(false)}
