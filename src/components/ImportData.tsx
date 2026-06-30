@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { preprocessImportData } from '../utils/import-parser';
+import { storage } from '../lib/storage';
 
 interface ImportDataProps {
   onImportComplete: () => void;
@@ -13,7 +14,7 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
   
   const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
-  const parseAndImport = async () => {
+  const parseAndImport = () => {
     if (!rawData.trim()) {
       alert("Cole os dados primeiro.");
       return;
@@ -36,21 +37,12 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
       addLog(`Dados validados: ${integrados.length} integrados e ${visits.length} visitas encontradas.`);
       addLog('Limpando base de dados antiga...');
       
-      await fetch('/api/clear-data', { method: 'DELETE' });
+      storage.clearAll();
       
-      addLog('Salvando no banco de dados...');
-      const response = await fetch('/api/bulk-import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          integrados: integrados,
-          visits: visits
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Falha ao importar os dados no banco.');
-      }
+      addLog('Salvando no armazenamento local...');
+      
+      storage.saveIntegrados(integrados);
+      storage.saveVisits(visits);
       
       addLog('Importação concluída com sucesso!');
       setTimeout(() => {

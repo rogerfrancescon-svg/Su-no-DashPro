@@ -10,6 +10,7 @@ import { ImportData } from './components/ImportData';
 import { Visit, Integrado } from './types';
 import { Menu, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { storage } from './lib/storage';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -21,27 +22,16 @@ export default function App() {
   const [integrados, setIntegrados] = useState<Integrado[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const loadData = () => {
+    setLoading(true);
     try {
-      setError(null);
-      const [resIntegrados, resVisits] = await Promise.all([
-        fetch('/api/integrados'),
-        fetch('/api/visits')
-      ]);
-      
-      if (!resIntegrados.ok || !resVisits.ok) {
-        throw new Error('Falha ao carregar dados do servidor.');
-      }
-      
-      const dataIntegrados = await resIntegrados.json();
-      const dataVisits = await resVisits.json();
+      const dataIntegrados = storage.getIntegrados();
+      const dataVisits = storage.getVisits();
       setIntegrados(dataIntegrados);
       setVisits(dataVisits);
     } catch (e) {
       console.error(e);
-      setError('Aviso: Não foi possível conectar ao banco de dados. O GitHub Pages não suporta banco de dados (Cloud SQL) ou servidor backend. Para que o sistema funcione completamente, você deve publicá-lo no Google Cloud Run, Render ou Vercel.');
     } finally {
       setLoading(false);
     }
@@ -66,41 +56,34 @@ export default function App() {
         
         if (diffDays > 120) {
           hasChanges = true;
-          const updated = { 
+          return { 
             ...i, 
             status: 'Fechado' as const, 
             fechamentoDate: new Date().toISOString().split('T')[0] 
           };
-          fetch('/api/integrados', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updated)
-          }).catch(console.error);
-          return updated;
         }
       }
       return i;
     });
 
+    if (hasChanges) {
+      setIntegrados(updatedIntegrados);
+      storage.saveIntegrados(updatedIntegrados);
+    }
+
   }, [integrados]);
 
-  const handleAddVisit = async (newVisit: Visit) => {
-    await fetch('/api/visits', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newVisit)
-    });
-    await loadData();
+  const handleAddVisit = (newVisit: Visit) => {
+    const updatedVisits = [...visits, newVisit];
+    setVisits(updatedVisits);
+    storage.saveVisits(updatedVisits);
     setIsVisitFormOpen(false);
   };
 
-  const handleUpdateVisit = async (updatedVisit: Visit) => {
-    await fetch('/api/visits', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedVisit)
-    });
-    await loadData();
+  const handleUpdateVisit = (updatedVisit: Visit) => {
+    const updatedVisits = visits.map(v => v.id === updatedVisit.id ? updatedVisit : v);
+    setVisits(updatedVisits);
+    storage.saveVisits(updatedVisits);
     setEditingVisitId(null);
     setIsVisitFormOpen(false);
   };
@@ -116,6 +99,7 @@ export default function App() {
     setIsVisitFormOpen(false);
     setEditingVisitId(null);
   };
+
 
   const handleExport = () => {
     const dataToExport = visits.map(v => {
@@ -214,13 +198,10 @@ export default function App() {
         return (
           <Integrados 
             integrados={integrados} 
-            onUpdate={async (updated) => {
-              await fetch('/api/integrados', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updated)
-              });
-              await loadData();
+            onUpdate={(updated) => {
+              const updatedIntegrados = integrados.map(i => i.id === updated.id ? updated : i);
+              setIntegrados(updatedIntegrados);
+              storage.saveIntegrados(updatedIntegrados);
             }}
           />
         );
@@ -284,11 +265,6 @@ export default function App() {
         </header>
         <div className="flex-1 p-4 md:p-8 overflow-y-auto w-full">
           <div className="max-w-7xl mx-auto w-full">
-            {error && (
-              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg shadow-sm">
-                <p className="font-medium text-sm">{error}</p>
-              </div>
-            )}
             {renderContent()}
           </div>
         </div>
