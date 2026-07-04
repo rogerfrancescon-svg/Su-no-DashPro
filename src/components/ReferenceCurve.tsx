@@ -1,23 +1,42 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { growthCurve } from '../data';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export function ReferenceCurve() {
+  const fullCurve = useMemo(() => {
+    const sorted = [...growthCurve].sort((a, b) => a.dia - b.dia);
+    const full = [];
+    const maxDia = sorted[sorted.length - 1].dia;
+    
+    for (let dia = 1; dia <= maxDia; dia++) {
+      const exactMatch = sorted.find(p => p.dia === dia);
+      if (exactMatch) {
+        full.push(exactMatch);
+        continue;
+      }
+      
+      for (let i = 0; i < sorted.length - 1; i++) {
+        if (dia > sorted[i].dia && dia < sorted[i+1].dia) {
+          const p1 = sorted[i];
+          const p2 = sorted[i+1];
+          const ratio = (dia - p1.dia) / (p2.dia - p1.dia);
+          
+          full.push({
+            dia,
+            pesoInicial: p1.pesoInicial + ratio * (p2.pesoInicial - p1.pesoInicial),
+            pesoFinal: p1.pesoFinal + ratio * (p2.pesoFinal - p1.pesoFinal),
+            cmd: p1.cmd + ratio * (p2.cmd - p1.cmd),
+            consumoAcumulado: p1.consumoAcumulado + ratio * (p2.consumoAcumulado - p1.consumoAcumulado),
+            gpd: p1.gpd + ratio * (p2.gpd - p1.gpd)
+          });
+          break;
+        }
+      }
+    }
+    return full;
+  }, []);
+
   return (
     <div className="space-y-6">
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-80">
-        <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Curva de Consumo Acumulado Esperado</h2>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={growthCurve} margin={{ top: 5, right: 20, bottom: 25, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="dia" label={{ value: 'Idade (Dias)', position: 'insideBottom', offset: -10 }} stroke="#64748b" fontSize={12} />
-            <YAxis label={{ value: 'Consumo (kg)', angle: -90, position: 'insideLeft' }} stroke="#64748b" fontSize={12} />
-            <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-            <Line type="monotone" dataKey="consumoAcumulado" stroke="#3b82f6" strokeWidth={3} dot={{ r: 2 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
         <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider p-6 bg-white border-b border-slate-200">Programas Alimentares (Fases)</h2>
         <div className="overflow-x-auto">
@@ -84,7 +103,7 @@ export function ReferenceCurve() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {growthCurve.map((row) => (
+              {fullCurve.map((row) => (
                 <tr key={row.dia} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-semibold text-slate-800">{row.dia}</td>
                   <td className="px-4 py-3">{row.pesoInicial.toFixed(2)}</td>

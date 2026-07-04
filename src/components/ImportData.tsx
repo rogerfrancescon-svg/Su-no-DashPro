@@ -11,10 +11,11 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   
   const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
-  const parseAndImport = () => {
+  const parseAndImport = async () => {
     if (!rawData.trim()) {
       alert("Cole os dados primeiro.");
       return;
@@ -35,14 +36,33 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
       }
       
       addLog(`Dados validados: ${integrados.length} integrados e ${visits.length} visitas encontradas.`);
-      addLog('Limpando base de dados antiga...');
+      addLog('Dados validados. Salvando no banco de dados...');
       
-      storage.clearAll();
+      const currentIntegrados = await storage.getIntegrados();
+      const currentVisits = await storage.getVisits();
       
-      addLog('Salvando no armazenamento local...');
+      const newIntegrados = [...currentIntegrados];
+      integrados.forEach(i => {
+         if (!newIntegrados.find(existing => existing.id === i.id)) {
+            newIntegrados.push(i);
+         }
+      });
       
-      storage.saveIntegrados(integrados);
-      storage.saveVisits(visits);
+      const newVisits = [...currentVisits];
+      visits.forEach(v => {
+         const existingIndex = newVisits.findIndex(existing => 
+            existing.id === v.id || 
+            (existing.integradoId === v.integradoId && existing.date === v.date)
+         );
+         if (existingIndex >= 0) {
+            newVisits[existingIndex] = { ...newVisits[existingIndex], ...v, id: newVisits[existingIndex].id }; // Update existing but keep UUID
+         } else {
+            newVisits.push(v);
+         }
+      });
+      
+      await storage.saveIntegrados(newIntegrados);
+      await storage.saveVisits(newVisits);
       
       addLog('Importação concluída com sucesso!');
       setTimeout(() => {
@@ -75,8 +95,8 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
       <h2 className="text-lg font-bold text-slate-800 mb-4">Importar Dados</h2>
       <p className="text-sm text-slate-600 mb-4">
-        Anexe o arquivo (.txt ou .csv) contendo os dados extraídos do PDF ou Excel. 
-        O sistema irá identificar automaticamente os integrados, as visitas, o consumo e as recomendações.
+        Anexe o arquivo (.txt, .csv, .tsv) ou cole abaixo os dados extraídos do Excel. 
+        O sistema espera as colunas na seguinte ordem: <strong>Data, Integrado, Alojamento, Idade, Recomendação, Consumo acumulado, Mortalidade, Comedouro, Colaborador, Consumos de Ração/meta, Peso aloj, Pontuação Sanitária</strong>.
         As datas devem estar no formato DD/MM/AAAA.
       </p>
       
@@ -103,7 +123,7 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
         placeholder="Os dados carregados do arquivo aparecerão aqui..."
       />
       
-      <div className="flex gap-4">
+      <div className="flex gap-4 items-center">
         <button 
           onClick={parseAndImport}
           disabled={loading}
@@ -111,21 +131,41 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
         >
           {loading ? 'Importando...' : 'Iniciar Importação'}
         </button>
-        <button 
-          onClick={() => {
-            if (window.confirm('Tem certeza que deseja apagar TODOS os dados do sistema? Esta ação é irreversível.')) {
-              storage.clearAll();
-              addLog('Todos os dados foram apagados.');
-              setTimeout(() => {
-                onImportComplete();
-              }, 1000);
-            }
-          }}
-          disabled={loading}
-          className="bg-red-600 text-white px-6 py-2 rounded text-sm font-semibold hover:bg-red-700 transition disabled:opacity-50"
-        >
-          Apagar Todos os Dados
-        </button>
+        
+        {confirmDeleteAll ? (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-sm text-red-600 font-bold">Apagar TUDO?</span>
+            <button 
+              onClick={async () => {
+                await storage.clearAll();
+                addLog('Todos os dados foram apagados.');
+                setConfirmDeleteAll(false);
+                setTimeout(() => {
+                  onImportComplete();
+                }, 1000);
+              }}
+              disabled={loading}
+              className="bg-red-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-red-700 transition disabled:opacity-50"
+            >
+              Sim, Apagar
+            </button>
+            <button 
+              onClick={() => setConfirmDeleteAll(false)}
+              disabled={loading}
+              className="bg-slate-200 text-slate-800 px-4 py-2 rounded text-sm font-semibold hover:bg-slate-300 transition disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <button 
+            onClick={() => setConfirmDeleteAll(true)}
+            disabled={loading}
+            className="bg-red-600 text-white px-6 py-2 rounded text-sm font-semibold hover:bg-red-700 transition disabled:opacity-50 ml-auto"
+          >
+            Apagar Todos os Dados
+          </button>
+        )}
       </div>
 
       {logs.length > 0 && (

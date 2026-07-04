@@ -1,11 +1,11 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, Cell, ReferenceArea, LabelList
 } from 'recharts';
 import { Visit, Integrado } from '../types';
 import { getExpectedConsumption } from '../data';
-import { Filter, Calendar, Download, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { Filter, Calendar, Download, TrendingUp, TrendingDown, AlertTriangle, ArrowUpDown } from 'lucide-react';
 
 interface DashboardProps {
   visits: Visit[];
@@ -15,6 +15,7 @@ interface DashboardProps {
 export function Dashboard({ visits, integrados }: DashboardProps) {
   const [selectedIntegradoId, setSelectedIntegradoId] = useState<string>('all');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<string>('name-asc');
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   useEffect(() => {
@@ -95,11 +96,14 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
       const visitsAtAge = filteredVisits.filter(v => v.idade === idade);
       const dataPoint: any = {
         idade,
-        consumoEsperado: expected
+        consumoEsperado: expected,
+        consumoEsperadoRange: [Math.max(0, expected - 5), expected + 5]
       };
       
       visitsAtAge.forEach(v => {
-        dataPoint[v.integradoId] = v.consumoAcumuladoReal;
+        if (v.consumoAcumuladoReal && v.consumoAcumuladoReal > 0) {
+          dataPoint[v.integradoId] = v.consumoAcumuladoReal;
+        }
       });
 
       return dataPoint;
@@ -110,6 +114,7 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
   const latestVisitsData = useMemo(() => {
     const latestVisitsMap = new Map<string, Visit>();
     filteredVisits.forEach(v => {
+      if (!v.consumoAcumuladoReal || v.consumoAcumuladoReal === 0) return;
       const existing = latestVisitsMap.get(v.integradoId);
       if (!existing || new Date(v.date).getTime() > new Date(existing.date).getTime()) {
         latestVisitsMap.set(v.integradoId, v);
@@ -140,17 +145,58 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
         consumoEsperado: expected,
         diferenca: Number((v.consumoAcumuladoReal - expected).toFixed(2)),
         mortalidade: v.mortalidade,
+        animaisMortos: v.animaisMortos,
+        animaisAlojados: v.animaisAlojados,
       };
-    }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [filteredVisits, filteredIntegrados]);
+    }).sort((a, b) => {
+      switch (sortBy) {
+        case 'name-desc':
+          return b.name.localeCompare(a.name);
+        case 'diferenca-desc':
+          return b.diferenca - a.diferenca;
+        case 'diferenca-asc':
+          return a.diferenca - b.diferenca;
+        case 'idade-desc':
+          return b.idade - a.idade;
+        case 'idade-asc':
+          return a.idade - b.idade;
+        case 'name-asc':
+        default:
+          return a.name.localeCompare(b.name);
+      }
+    });
+  }, [filteredVisits, filteredIntegrados, sortBy]);
 
   const stats = useMemo(() => {
     const totalIntegrados = filteredIntegrados.length;
     // Count alerts only on latest visits
     const alertCount = latestVisitsData.filter(d => d.diferenca < -5 || d.diferenca > 5).length;
-    const avgMortalidade = filteredVisits.length > 0 
-      ? filteredVisits.reduce((acc, curr) => acc + (curr.mortalidade || 0), 0) / filteredVisits.length 
-      : 0;
+    const avgMortalidade = (() => {
+      let totalMortos = 0;
+      let totalAlojados = 0;
+      let sumPercentages = 0;
+      let countPercentages = 0;
+
+      latestVisitsData.forEach(d => {
+        const mortos = d.animaisMortos !== undefined ? d.animaisMortos : (d.mortalidade || 0);
+        const alojados = d.animaisAlojados || 0;
+        
+        if (alojados > 0) {
+          totalMortos += mortos;
+          totalAlojados += alojados;
+        } else if (d.mortalidade !== undefined) {
+          sumPercentages += d.mortalidade;
+          countPercentages++;
+        }
+      });
+      
+      if (totalAlojados > 0) {
+        return (totalMortos / totalAlojados) * 100;
+      } else if (countPercentages > 0) {
+        return sumPercentages / countPercentages;
+      }
+      return 0;
+    })();
     const avgDiferenca = latestVisitsData.length > 0
       ? latestVisitsData.reduce((acc, curr) => acc + curr.diferenca, 0) / latestVisitsData.length
       : 0;
@@ -158,49 +204,26 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
     return { totalIntegrados, alertCount, avgMortalidade, avgDiferenca };
   }, [latestVisitsData, filteredIntegrados.length, filteredVisits]);
 
-  const handleExportCSV = () => {
-    if (latestVisitsData.length === 0) return;
-    
-    const headers = ['Lote', 'Data da Última Visita', 'Idade (Dias)', 'Consumo Real (kg)', 'Consumo Esperado (kg)', 'Diferença (kg)', 'Mortalidade'];
-    const rows = latestVisitsData.map(d => [
-      d.fullName,
-      new Date(d.date).toLocaleDateString('pt-BR'),
-      d.idade,
-      d.consumoReal.toFixed(2),
-      d.consumoEsperado.toFixed(2),
-      d.diferenca.toFixed(2),
-      d.mortalidade
-    ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `dashboard_export_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h1 className="text-2xl font-bold text-slate-800">Dashboard de Consumo</h1>
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-          <button 
-            onClick={handleExportCSV}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm font-medium text-sm"
-          >
-            <Download className="w-4 h-4" />
-            Exportar CSV
-          </button>
-          
+          <div className="flex items-center gap-2 text-sm text-slate-500 bg-white border border-slate-200 px-3 py-2 rounded-lg shadow-sm w-full md:w-auto">
+            <ArrowUpDown className="w-4 h-4" />
+            <select 
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="bg-transparent outline-none cursor-pointer text-slate-700 font-medium w-full"
+            >
+              <option value="name-asc">Nome (A-Z)</option>
+              <option value="name-desc">Nome (Z-A)</option>
+              <option value="diferenca-asc">Desvio (Menor p/ Maior)</option>
+              <option value="diferenca-desc">Desvio (Maior p/ Menor)</option>
+              <option value="idade-desc">Idade (Maior)</option>
+              <option value="idade-asc">Idade (Menor)</option>
+            </select>
+          </div>
           <div className="relative w-full md:w-48">
             <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <select
@@ -267,9 +290,9 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
         <div className="bg-blue-600 rounded-xl p-5 shadow-lg text-white flex flex-col justify-between">
           <div>
             <p className="text-xs font-bold text-blue-100 uppercase mb-1">Média Mortalidade</p>
-            <p className="text-3xl font-bold">{stats.avgMortalidade.toFixed(1)}</p>
+            <p className="text-3xl font-bold">{stats.avgMortalidade.toFixed(2)}%</p>
           </div>
-          <p className="text-xs text-blue-200 font-medium mt-3">Média por visita no período</p>
+          <p className="text-xs text-blue-200 font-medium mt-3">Média dos lotes em andamento</p>
         </div>
       </div>
 
@@ -278,7 +301,7 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
         <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm h-[400px] lg:h-[500px] xl:h-[600px] min-w-0">
           <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Consumo Real vs Tabela (por Idade)</h2>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 35, left: 0 }}>
+            <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 35, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="idade" type="number" domain={[1, 100]} tickCount={10} label={{ value: 'Idade (Dias)', position: 'insideBottom', offset: -15 }} stroke="#64748b" fontSize={12} />
               <YAxis label={{ value: 'Consumo (kg)', angle: -90, position: 'insideLeft' }} stroke="#64748b" fontSize={12} />
@@ -300,34 +323,42 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
               <Tooltip 
                 contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 labelFormatter={(label) => `Idade: ${label} dias`} 
-                itemSorter={(item) => item.dataKey === 'consumoEsperado' ? -1 : 1}
-                formatter={(value: number) => [`${value.toFixed(2)} kg`, '']}
+                formatter={(value: number | [number, number], name: string) => {
+                  if (Array.isArray(value)) {
+                    return [`${value[0].toFixed(2)} - ${value[1].toFixed(2)} kg`, name];
+                  }
+                  return [`${value.toFixed(2)} kg`, name];
+                }}
               />
-              <Legend 
-                verticalAlign="top" 
-                height={36} 
-                iconType="circle" 
-                payload={[
-                  { value: 'Curva Alvo', type: 'circle', id: 'consumoEsperado', color: '#94a3b8' },
-                  ...filteredIntegrados.map((integrado, index) => {
-                    const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
-                    const abbreviateName = (name?: string) => {
-                      if (!name) return 'Desconhecido';
-                      const parts = name.trim().split(' ');
-                      if (parts.length > 1) {
-                        return `${parts[0]} ${parts[parts.length - 1][0]}.`;
-                      }
-                      return name;
-                    };
-                    return {
-                      value: abbreviateName(integrado.name),
-                      type: 'circle',
-                      id: integrado.id,
-                      color: colors[index % colors.length]
-                    };
-                  })
-                ]}
-              />
+              {filteredIntegrados.length <= 4 && (
+                <Legend 
+                  verticalAlign="top" 
+                  height={36} 
+                  iconType="circle" 
+                  payload={[
+                    { value: 'Curva Alvo', type: 'circle', id: 'consumoEsperado', color: '#94a3b8' },
+                    ...Array.from(new Map(filteredIntegrados.map((integrado, index) => {
+                      const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
+                      const abbreviateName = (name?: string) => {
+                        if (!name) return 'Desconhecido';
+                        const parts = name.trim().split(' ');
+                        if (parts.length > 1) {
+                          return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+                        }
+                        return name;
+                      };
+                      const name = abbreviateName(integrado.name);
+                      return [name, {
+                        value: name,
+                        type: 'circle',
+                        id: integrado.id,
+                        color: colors[index % colors.length]
+                      }];
+                    })).values()) as any[]
+                  ]}
+                />
+              )}
+              <Area type="monotone" dataKey="consumoEsperadoRange" name="Margem de Erro (±5kg)" stroke="none" fill="#cbd5e1" fillOpacity={0.3} activeDot={false} />
               <Line type="monotone" dataKey="consumoEsperado" name="Curva Alvo" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" dot={false} />
               {filteredIntegrados.map((integrado, index) => {
                 const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
@@ -355,11 +386,11 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
                   />
                 );
               })}
-            </LineChart>
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="flex flex-col gap-6">
           <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm h-[400px] min-w-0">
             <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Desvio de Consumo por Lote (Última Visita)</h2>
             <ResponsiveContainer width="100%" height="100%">
@@ -375,7 +406,7 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
                 <Bar dataKey="diferenca" name="Diferença vs Alvo" radius={[4, 4, 0, 0]}>
                   {
                     latestVisitsData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.diferenca < 0 ? '#ef4444' : '#3b82f6'} />
+                      <Cell key={`cell-${index}`} fill={(entry.diferenca >= -5 && entry.diferenca <= 5) ? '#10b981' : entry.diferenca < 0 ? '#ef4444' : '#3b82f6'} />
                     ))
                   }
                   <LabelList 
@@ -395,7 +426,7 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
             <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Resumo da Última Visita (Tabela)</h2>
             <div className="flex-1 overflow-auto rounded-lg border border-slate-100">
               <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0 z-10">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Lote</th>
                     <th className="px-4 py-3 font-semibold text-center">Idade</th>
@@ -412,11 +443,7 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
                         <td className="px-4 py-3 text-slate-600 text-right font-medium">{row.consumoReal.toFixed(2)} kg</td>
                         <td className="px-4 py-3 text-right">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
-                            row.diferenca > 0 
-                              ? 'bg-blue-100 text-blue-700' 
-                              : row.diferenca < -5 
-                                ? 'bg-red-100 text-red-700' 
-                                : 'bg-slate-100 text-slate-700'
+                            (row.diferenca >= -5 && row.diferenca <= 5) ? 'bg-emerald-100 text-emerald-700' : row.diferenca > 0 ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
                           }`}>
                             {row.diferenca > 0 ? '+' : ''}{row.diferenca.toFixed(2)} kg
                           </span>

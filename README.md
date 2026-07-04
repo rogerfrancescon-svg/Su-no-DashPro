@@ -1,20 +1,60 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# AgriDash Pro
 
-# Run and deploy your AI Studio app
+Gestão e acompanhamento dinâmico de lotes de animais no campo, com análise de curva de consumo baseada na tabela Cargill. Permite lançamento e visualização de dados via dashboard preciso.
 
-This contains everything you need to run your app locally.
+## Funcionalidades Principais
+- **Dashboard de Desempenho**: Visão geral do consumo, diferenças e indicadores chave dos lotes.
+- **Gestão de Lotes/Integrados**: Histórico e controle total dos lotes ativos e fechados.
+- **Curva de Referência**: Análise baseada na tabela Cargill com projeções de dias e metas diárias.
+- **Exportação de Lançamentos**: Exportação direta dos dados e visitas para planilhas Excel.
+- **Suporte a Múltiplos Tipos de Dados**: Registros detalhados do desenvolvimento do lote.
 
-View your app in AI Studio: https://ai.studio/apps/8a7a96ac-a4b7-4240-8193-ffe3f5ff653b
+## Tecnologias
+- **Frontend**: React, Tailwind CSS, Recharts, Lucide Icons, Vite
+- **Backend / Database**: Supabase (PostgreSQL), Firebase
+- **Exportação de Dados**: XLSX
+- **Linguagem**: TypeScript
 
-## Run Locally
+## Instalação e Execução
 
-**Prerequisites:**  Node.js
+### Pré-requisitos
+- [Node.js](https://nodejs.org/en/) (versão 18+ recomendada)
+- `npm` ou `yarn` para gerenciamento de pacotes
 
+### Passo a passo
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. **Clone o repositório**
+   ```bash
+   git clone <URL_DO_REPOSITORIO>
+   cd <NOME_DO_DIRETORIO>
+   ```
+
+2. **Instale as dependências**
+   ```bash
+   npm install
+   ```
+
+3. **Configure as variáveis de ambiente**
+   - Copie o arquivo de exemplo de ambiente:
+     ```bash
+     cp .env.example .env
+     ```
+   - Preencha as chaves da API e as URLs do Supabase/Firebase necessárias no arquivo `.env`.
+
+4. **Inicie o servidor de desenvolvimento**
+   ```bash
+   npm run dev
+   ```
+
+5. A aplicação estará disponível na porta configurada pelo Vite (normalmente `http://localhost:5173` ou `http://localhost:3000`).
+
+## Estrutura do Projeto
+- `src/` - Contém todo o código-fonte (componentes, dados, utilitários).
+  - `components/` - Componentes principais da interface (Dashboard, Formulários, Tabelas).
+  - `lib/` - Configurações de conexão e clientes (Supabase, Storage).
+  - `types.ts` - Tipos TypeScript de toda a aplicação.
+- `.env.example` - Template de variáveis de ambiente seguras.
+- `package.json` - Dependências e scripts do projeto.
+
+## Contribuição
+Fique à vontade para abrir _issues_ ou enviar _pull requests_ com melhorias e correções.

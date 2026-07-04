@@ -16,6 +16,16 @@ export const growthCurve: GrowthCurvePoint[] = [
   { dia: 100, pesoInicial: 127.54, pesoFinal: 128.48, cmd: 2.980, consumoAcumulado: 232.15, gpd: 0.942 }
 ];
 
+export const defaultMetas = {
+  metaAlojamento: 17.00,
+  metaCrescimento1: 30.82,
+  metaCrescimento2: 30.67,
+  metaCrescimento3: 45.71,
+  metaTerminacao1: 27.49,
+  metaTerminacao2: 63.15,
+  metaAcumulada: 214.85
+};
+
 export const getExpectedConsumption = (idade: number): number => {
   // Linear interpolation for exact day
   const exactMatch = growthCurve.find(p => p.dia === idade);

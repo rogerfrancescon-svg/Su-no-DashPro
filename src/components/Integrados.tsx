@@ -1,25 +1,37 @@
 import React, { useState } from 'react';
 import { Integrado } from '../types';
-import { Users } from 'lucide-react';
+import { Users, ClipboardList } from 'lucide-react';
 
 interface IntegradosProps {
   integrados: Integrado[];
+  totalVisits: number;
   onUpdate: (integrado: Integrado) => void;
   onDelete: (id: string) => void;
 }
 
-export function Integrados({ integrados, onUpdate, onDelete }: IntegradosProps) {
+export function Integrados({ integrados, totalVisits, onUpdate, onDelete }: IntegradosProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editLoteNumber, setEditLoteNumber] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editStatus, setEditStatus] = useState<'Em andamento' | 'Fechado'>('Em andamento');
   const [editFechamentoDate, setEditFechamentoDate] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Lotes Ativos</h2>
+        <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Histórico de Lotes</h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-sm text-slate-500 bg-white border border-slate-200 px-3 py-2 rounded-lg shadow-sm">
+            <Users className="w-4 h-4 text-blue-500" />
+            <span>Total Lotes: <strong className="text-slate-700">{integrados.length}</strong></span>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-slate-500 bg-white border border-slate-200 px-3 py-2 rounded-lg shadow-sm">
+            <ClipboardList className="w-4 h-4 text-emerald-500" />
+            <span>Total Lançamentos: <strong className="text-slate-700">{totalVisits}</strong></span>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -158,21 +170,39 @@ export function Integrados({ integrados, onUpdate, onDelete }: IntegradosProps) 
                               setEditDate(i.alojamentoDate);
                               setEditStatus(i.status);
                               setEditFechamentoDate(i.fechamentoDate || '');
+                              setDeleteConfirmId(null);
                             }}
                             className="text-blue-500 hover:text-blue-700 text-xs uppercase font-bold tracking-wider"
                           >
                             Editar
                           </button>
-                          <button 
-                            onClick={() => {
-                              if (window.confirm('Tem certeza que deseja apagar este integrado? Todas as visitas associadas também serão apagadas. Esta ação é irreversível.')) {
-                                onDelete(i.id);
-                              }
-                            }}
-                            className="text-red-500 hover:text-red-700 text-xs uppercase font-bold tracking-wider"
-                          >
-                            Apagar
-                          </button>
+                          {deleteConfirmId === i.id ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-red-600 font-bold mr-1">Tem certeza?</span>
+                              <button 
+                                onClick={() => {
+                                  onDelete(i.id);
+                                  setDeleteConfirmId(null);
+                                }}
+                                className="text-white bg-red-500 hover:bg-red-600 text-xs font-bold px-2 py-1 rounded"
+                              >
+                                Sim
+                              </button>
+                              <button 
+                                onClick={() => setDeleteConfirmId(null)}
+                                className="text-slate-600 bg-slate-200 hover:bg-slate-300 text-xs font-bold px-2 py-1 rounded"
+                              >
+                                Não
+                              </button>
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => setDeleteConfirmId(i.id)}
+                              className="text-red-500 hover:text-red-700 text-xs uppercase font-bold tracking-wider"
+                            >
+                              Apagar
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>

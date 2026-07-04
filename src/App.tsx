@@ -7,27 +7,50 @@ import { Integrados } from './components/Integrados';
 import { IntegradoForm } from './components/IntegradoForm';
 import { ReferenceCurve } from './components/ReferenceCurve';
 import { ImportData } from './components/ImportData';
+import { Login } from './components/Login';
 import { Visit, Integrado } from './types';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, LogOut, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { storage } from './lib/storage';
+import { supabase } from './lib/supabase';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
   const [isVisitFormOpen, setIsVisitFormOpen] = useState(false);
-  const [isIntegradoFormOpen, setIsIntegradoFormOpen] = useState(false);
   
   const [integrados, setIntegrados] = useState<Integrado[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<any>(null);
+  const [dbError, setDbError] = useState<string | null>(null);
 
-  const loadData = () => {
-    setLoading(true);
+  const checkConnection = async () => {
     try {
-      const dataIntegrados = storage.getIntegrados();
-      const dataVisits = storage.getVisits();
+      const { error } = await supabase.from('registros').select('id').limit(1);
+      if (error) {
+        if (error.message === 'Failed to fetch') {
+          setDbError(null); // Ignore in offline mode
+        } else {
+          setDbError(`Erro ao conectar com a tabela 'registros': ${error.message}`);
+        }
+      } else {
+        setDbError(null);
+      }
+    } catch (err: any) {
+      if (err.message !== 'Failed to fetch') {
+        setDbError(`Falha inesperada ao conectar: ${err.message}`);
+      }
+    }
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    await checkConnection();
+    try {
+      const dataIntegrados = await storage.getIntegrados();
+      const dataVisits = await storage.getVisits();
       setIntegrados(dataIntegrados);
       setVisits(dataVisits);
     } catch (e) {
@@ -38,7 +61,44 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadData();
+    const handleOfflineLogin = () => {
+      setSession({ user: { id: 'offline' } });
+      loadData();
+    };
+    window.addEventListener('offline-login', handleOfflineLogin);
+
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error && error.message === 'Failed to fetch') {
+        handleOfflineLogin();
+      } else {
+        setSession(session);
+        if (session) {
+          loadData();
+        } else {
+          setLoading(false);
+        }
+      }
+    }).catch((err) => {
+      if (err?.message === 'Failed to fetch') {
+        handleOfflineLogin();
+      } else {
+        setLoading(false);
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        loadData();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('offline-login', handleOfflineLogin);
+    };
   }, []);
 
   useEffect(() => {
@@ -54,7 +114,7 @@ export default function App() {
         const diffTime = today.getTime() - alojamento.getTime();
         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
         
-        if (diffDays > 120) {
+        if (diffDays > 110) {
           hasChanges = true;
           return { 
             ...i, 
@@ -73,25 +133,45 @@ export default function App() {
 
   }, [integrados]);
 
-  const handleAddVisit = (newVisit: Visit) => {
+  const processIntegradoFromVisit = async (newVisit: Visit, integradoNome?: string, alojamentoDate?: string) => {
+    if (!integradoNome || !alojamentoDate) return;
+    const existing = integrados.find(i => i.id === newVisit.integradoId);
+    if (!existing) {
+      const newIntegrado: Integrado = {
+        id: newVisit.integradoId,
+        name: integradoNome,
+        alojamentoDate,
+        status: 'Em andamento'
+      };
+      const updatedIntegrados = [...integrados, newIntegrado];
+      setIntegrados(updatedIntegrados);
+      await storage.saveIntegrados(updatedIntegrados);
+    }
+  };
+
+  const handleAddVisit = async (newVisit: Visit, integradoNome?: string, alojamentoDate?: string) => {
+    setIsVisitFormOpen(false);
+    await processIntegradoFromVisit(newVisit, integradoNome, alojamentoDate);
     const updatedVisits = [...visits, newVisit];
     setVisits(updatedVisits);
-    storage.saveVisits(updatedVisits);
-    setIsVisitFormOpen(false);
+    const savedVisits = await storage.saveVisits(updatedVisits, [newVisit]);
+    setVisits([...savedVisits]);
   };
 
-  const handleUpdateVisit = (updatedVisit: Visit) => {
-    const updatedVisits = visits.map(v => v.id === updatedVisit.id ? updatedVisit : v);
-    setVisits(updatedVisits);
-    storage.saveVisits(updatedVisits);
+  const handleUpdateVisit = async (updatedVisit: Visit, integradoNome?: string, alojamentoDate?: string) => {
     setEditingVisitId(null);
     setIsVisitFormOpen(false);
+    await processIntegradoFromVisit(updatedVisit, integradoNome, alojamentoDate);
+    const updatedVisits = visits.map(v => v.id === updatedVisit.id ? updatedVisit : v);
+    setVisits(updatedVisits);
+    const savedVisits = await storage.saveVisits(updatedVisits, [updatedVisit]);
+    setVisits([...savedVisits]);
   };
 
-  const handleDeleteVisit = (id: string) => {
+  const handleDeleteVisit = async (id: string) => {
     const updatedVisits = visits.filter(v => v.id !== id);
     setVisits(updatedVisits);
-    storage.saveVisits(updatedVisits);
+    await storage.deleteVisit(id);
   };
 
   const handleEditVisitClick = (id: string) => {
@@ -113,16 +193,32 @@ export default function App() {
       const dataFormatada = v.date ? new Date(Number(v.date.split('-')[0]), Number(v.date.split('-')[1]) - 1, Number(v.date.split('-')[2])).toLocaleDateString('pt-BR') : '';
       
       return {
-        'Data da Visita': dataFormatada,
+        'Data': dataFormatada,
         'Integrado': integrado?.name || '',
-        'Lote': integrado?.loteNumber || '',
-        'Data de Alojamento': integrado?.alojamentoDate ? new Date(Number(integrado.alojamentoDate.split('-')[0]), Number(integrado.alojamentoDate.split('-')[1]) - 1, Number(integrado.alojamentoDate.split('-')[2])).toLocaleDateString('pt-BR') : '',
-        'Idade (dias)': v.idade,
-        'Consumo Real (kg)': v.consumoAcumuladoReal,
-        'Mortalidade': v.mortalidade || '',
-        'Status do Comedouro': v.comedouro || '',
-        'Recomendação Técnica': v.recomendacao || '',
-        'Colaborador/Técnico': v.colaborador || ''
+        'Alojamento': integrado?.alojamentoDate ? new Date(Number(integrado.alojamentoDate.split('-')[0]), Number(integrado.alojamentoDate.split('-')[1]) - 1, Number(integrado.alojamentoDate.split('-')[2])).toLocaleDateString('pt-BR') : '',
+        'Idade': v.idade,
+        'Animais Alojados': v.animaisAlojados || '',
+        'Recomendação': v.recomendacao || '',
+        'Consumo acumulado': v.consumoAcumuladoReal ?? '',
+        '% Mortalidade': v.mortalidade ?? '',
+        'Comedouro': v.comedouro || '',
+        'Colaborador': v.colaborador ? v.colaborador.replace(/\s*,\s*/g, ' / ') : '',
+        'Meta Aloj': v.metaAlojamento || '',
+        'Cons. Aloj': v.consumoAlojamento || '',
+        'Meta Cresc 1': v.metaCrescimento1 || '',
+        'Cons. Cresc 1': v.consumoCrescimento1 || '',
+        'Meta Cresc 2': v.metaCrescimento2 || '',
+        'Cons. Cresc 2': v.consumoCrescimento2 || '',
+        'Meta Cresc 3': v.metaCrescimento3 || '',
+        'Cons. Cresc 3': v.consumoCrescimento3 || '',
+        'Meta Term 1': v.metaTerminacao1 || '',
+        'Cons. Term 1': v.consumoTerminacao1 || '',
+        'Meta Term 2': v.metaTerminacao2 || '',
+        'Cons. Term 2': v.consumoTerminacao2 || '',
+        'Cons. Acum. Real': v.consumoAcumuladoReal ?? '',
+        'Meta Acum.': v.metaAcumulada || '',
+        'Peso aloj': v.pesoAloj || '',
+        'Pontuação Sanitária': v.pontuacaoSanitaria || '',
       };
     });
 
@@ -170,29 +266,20 @@ export default function App() {
         return (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-              <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Histórico de Visitas</h2>
+              <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Lançamentos</h2>
               <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-                <button onClick={() => setIsIntegradoFormOpen(true)} className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded text-sm font-semibold hover:bg-slate-50 transition-colors">
-                  + Novo Integrado
+                <button 
+                  onClick={handleExport} 
+                  className="flex items-center gap-2 bg-white text-slate-700 border border-slate-200 px-4 py-2 rounded text-sm font-semibold hover:bg-slate-50 transition-colors shadow-sm"
+                >
+                  <Download className="w-4 h-4" />
+                  Exportar
                 </button>
                 <button onClick={() => { setEditingVisitId(null); setIsVisitFormOpen(true); }} className="bg-slate-900 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-slate-800 transition-colors">
                   + Novo Lançamento
                 </button>
               </div>
             </div>
-            {isIntegradoFormOpen && (
-              <div className="mb-8">
-                <IntegradoForm 
-                  onSave={(i) => {
-                    const newIntegrados = [...integrados, i];
-                    setIntegrados(newIntegrados);
-                    storage.saveIntegrados(newIntegrados);
-                    setIsIntegradoFormOpen(false);
-                  }}
-                  onCancel={() => setIsIntegradoFormOpen(false)}
-                />
-              </div>
-            )}
             <VisitsList visits={visits} integrados={integrados} onEditVisit={handleEditVisitClick} onDeleteVisit={handleDeleteVisit} />
           </div>
         )
@@ -201,19 +288,24 @@ export default function App() {
         return (
           <Integrados 
             integrados={integrados} 
-            onUpdate={(updated) => {
+            totalVisits={visits.length}
+            onUpdate={async (updated) => {
               const updatedIntegrados = integrados.map(i => i.id === updated.id ? updated : i);
               setIntegrados(updatedIntegrados);
-              storage.saveIntegrados(updatedIntegrados);
+              await storage.saveIntegrados(updatedIntegrados);
+              // Save visits so that the new Integrado name/alojamento gets updated in all its records in Supabase
+              const visitsToSync = visits.filter(v => v.integradoId === updated.id);
+              await storage.saveVisits(visits, visitsToSync);
             }}
-            onDelete={(id) => {
+            onDelete={async (id) => {
               const updatedIntegrados = integrados.filter(i => i.id !== id);
               setIntegrados(updatedIntegrados);
-              storage.saveIntegrados(updatedIntegrados);
               
+              const visitsToDelete = visits.filter(v => v.integradoId === id).map(v => v.id);
               const updatedVisits = visits.filter(v => v.integradoId !== id);
               setVisits(updatedVisits);
-              storage.saveVisits(updatedVisits);
+              
+              await storage.deleteIntegrado(id, visitsToDelete as string[]);
             }}
           />
         );
@@ -245,6 +337,14 @@ export default function App() {
     );
   }
 
+  if (!session) {
+    return <Login />;
+  }
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC] font-sans text-slate-900">
       {/* Mobile overlay */}
@@ -272,11 +372,28 @@ export default function App() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-slate-500 hidden sm:inline-block">Data de Campo: {new Date().toLocaleDateString('pt-BR')}</span>
-            <button onClick={handleExport} className="bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded font-medium text-xs md:text-sm hover:bg-blue-700 transition-colors whitespace-nowrap">Exportar</button>
+            <button onClick={handleLogout} className="text-slate-500 hover:text-slate-700 flex items-center gap-1 text-sm font-medium transition-colors" title="Sair">
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </header>
         <div className="flex-1 p-4 md:p-8 overflow-y-auto w-full">
           <div className="max-w-7xl mx-auto w-full">
+            {dbError && (
+              <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-md">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <X className="h-5 w-5 text-red-400" aria-hidden="true" />
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-red-800">Falha na conexão com banco de dados</h3>
+                    <div className="mt-2 text-sm text-red-700">
+                      <p>{dbError}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {renderContent()}
           </div>
         </div>

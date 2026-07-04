@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Visit, Integrado } from '../types';
 import { getExpectedConsumption } from '../data';
-import { Search } from 'lucide-react';
+import { Search, ArrowUpDown } from 'lucide-react';
 
 interface VisitsListProps {
   visits: Visit[];
@@ -10,11 +10,35 @@ interface VisitsListProps {
   onDeleteVisit: (id: string) => void;
 }
 
+type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'idade-desc' | 'idade-asc';
+
 export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit }: VisitsListProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<SortOption>('date-desc');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // Sort by date descending
-  const sortedVisits = [...visits].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const getIntegradoName = (integradoId: string) => {
+    return integrados.find(i => i.id === integradoId)?.name || '';
+  };
+
+  const sortedVisits = [...visits].sort((a, b) => {
+    switch (sortBy) {
+      case 'date-desc':
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      case 'date-asc':
+        return new Date(a.date).getTime() - new Date(b.date).getTime();
+      case 'name-asc':
+        return getIntegradoName(a.integradoId).localeCompare(getIntegradoName(b.integradoId));
+      case 'name-desc':
+        return getIntegradoName(b.integradoId).localeCompare(getIntegradoName(a.integradoId));
+      case 'idade-desc':
+        return b.idade - a.idade;
+      case 'idade-asc':
+        return a.idade - b.idade;
+      default:
+        return 0;
+    }
+  });
 
   const filteredVisits = sortedVisits.filter(v => {
     const integrado = integrados.find(i => i.id === v.integradoId);
@@ -24,8 +48,23 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit }: V
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-         <div className="relative w-full md:max-w-sm">
+      <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
+         <div className="flex items-center gap-2 text-sm text-slate-500 bg-white border border-slate-200 px-3 py-2 rounded">
+           <ArrowUpDown className="w-4 h-4" />
+           <select 
+             value={sortBy}
+             onChange={(e) => setSortBy(e.target.value as SortOption)}
+             className="bg-transparent outline-none cursor-pointer text-slate-700"
+           >
+             <option value="date-desc">Data (Mais recentes)</option>
+             <option value="date-asc">Data (Mais antigas)</option>
+             <option value="name-asc">Nome (A-Z)</option>
+             <option value="name-desc">Nome (Z-A)</option>
+             <option value="idade-desc">Idade (Maior)</option>
+             <option value="idade-asc">Idade (Menor)</option>
+           </select>
+         </div>
+         <div className="relative w-full sm:max-w-sm">
            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
            <input 
              type="text" 
@@ -37,34 +76,47 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit }: V
          </div>
       </div>
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm text-slate-600 min-w-[1000px]">
-          <thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200">
+        <div className="overflow-auto max-h-[calc(100vh-240px)]">
+        <table className="w-full text-left text-sm text-slate-600 min-w-[3000px] relative">
+          <thead className="bg-slate-50 text-slate-700 font-medium sticky top-0 z-20 shadow-sm">
             <tr>
-                <th className="px-5 py-4 border-b border-slate-200">Data Visita</th>
+                <th className="px-5 py-4 border-b border-slate-200">Data</th>
                 <th className="px-5 py-4 border-b border-slate-200">Integrado</th>
-                <th className="px-5 py-4 border-b border-slate-200">Lote</th>
                 <th className="px-5 py-4 border-b border-slate-200">Alojamento</th>
                 <th className="px-5 py-4 border-b border-slate-200">Idade</th>
-                <th className="px-5 py-4 border-b border-slate-200">Consumo (Real vs Esp)</th>
-                <th className="px-5 py-4 border-b border-slate-200">Mortalidade</th>
+                <th className="px-5 py-4 border-b border-slate-200">Animais Alojados</th>
+                <th className="px-5 py-4 border-b border-slate-200 min-w-[300px]">Recomendação</th>
+                <th className="px-5 py-4 border-b border-slate-200">Consumo acumulado</th>
+                <th className="px-5 py-4 border-b border-slate-200">% Mortalidade</th>
                 <th className="px-5 py-4 border-b border-slate-200">Comedouro</th>
-                <th className="px-5 py-4 border-b border-slate-200">Status</th>
-                <th className="px-5 py-4 border-b border-slate-200 w-64">Recomendações</th>
-                <th className="px-5 py-4 border-b border-slate-200">Técnico</th>
-                <th className="px-5 py-4 border-b border-slate-200 w-24">Ações</th>
+                <th className="px-5 py-4 border-b border-slate-200">Colaborador</th>
+                <th className="px-5 py-4 border-b border-slate-200">Meta Aloj</th>
+                <th className="px-5 py-4 border-b border-slate-200">Cons. Aloj</th>
+                <th className="px-5 py-4 border-b border-slate-200">Meta Cresc 1</th>
+                <th className="px-5 py-4 border-b border-slate-200">Cons. Cresc 1</th>
+                <th className="px-5 py-4 border-b border-slate-200">Meta Cresc 2</th>
+                <th className="px-5 py-4 border-b border-slate-200">Cons. Cresc 2</th>
+                <th className="px-5 py-4 border-b border-slate-200">Meta Cresc 3</th>
+                <th className="px-5 py-4 border-b border-slate-200">Cons. Cresc 3</th>
+                <th className="px-5 py-4 border-b border-slate-200">Meta Term 1</th>
+                <th className="px-5 py-4 border-b border-slate-200">Cons. Term 1</th>
+                <th className="px-5 py-4 border-b border-slate-200">Meta Term 2</th>
+                <th className="px-5 py-4 border-b border-slate-200">Cons. Term 2</th>
+                <th className="px-5 py-4 border-b border-slate-200">Cons. Acum. Real</th>
+                <th className="px-5 py-4 border-b border-slate-200">Meta Acum.</th>
+                <th className="px-5 py-4 border-b border-slate-200">Peso aloj</th>
+                <th className="px-5 py-4 border-b border-slate-200">Pontuação Sanitária</th>
+                <th className="px-5 py-4 border-b border-slate-200 w-24 sticky right-0 top-0 bg-slate-50 z-30">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredVisits.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-5 py-8 text-center text-slate-500">Nenhuma visita encontrada.</td>
+                  <td colSpan={27} className="px-5 py-8 text-center text-slate-500">Nenhuma visita encontrada.</td>
                 </tr>
               ) : filteredVisits.map((v) => {
                 const integrado = integrados.find(i => i.id === v.integradoId);
                 const expected = getExpectedConsumption(v.idade);
-                const diff = (v.consumoAcumuladoReal - expected).toFixed(2);
-                const isWarning = Math.abs(Number(diff)) > 5;
 
                 return (
                   <tr key={v.id} className="hover:bg-slate-50 transition-colors">
@@ -72,52 +124,82 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit }: V
                       new Date(Number(v.date.split('-')[0]), Number(v.date.split('-')[1]) - 1, Number(v.date.split('-')[2])).toLocaleDateString('pt-BR')
                     }</td>
                     <td className="px-5 py-4 font-medium text-slate-800">{integrado?.name || 'Desconhecido'}</td>
-                    <td className="px-5 py-4 whitespace-nowrap text-slate-600">{integrado?.loteNumber || '-'}</td>
                     <td className="px-5 py-4 whitespace-nowrap text-slate-600">{integrado?.alojamentoDate ? new Date(Number(integrado.alojamentoDate.split('-')[0]), Number(integrado.alojamentoDate.split('-')[1]) - 1, Number(integrado.alojamentoDate.split('-')[2])).toLocaleDateString('pt-BR') : '-'}</td>
-                    <td className="px-5 py-4 whitespace-nowrap">{v.idade} dias</td>
-                    <td className="px-5 py-4 whitespace-nowrap">
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-slate-800">{v.consumoAcumuladoReal} kg</span>
-                        <span className="text-xs text-slate-500">Esp: {expected} kg</span>
+                    <td className="px-5 py-4 whitespace-nowrap">{v.idade}</td>
+                    <td className="px-5 py-4 whitespace-nowrap">{v.animaisAlojados || '-'}</td>
+                    <td className="px-5 py-4">
+                      <div className="text-xs leading-relaxed" title={v.recomendacao}>
+                        {v.recomendacao ? (
+                          <div className="space-y-1">
+                            {v.recomendacao.split('\n').filter(l => l.trim()).map((line, i) => (
+                              <div key={i}>{line.replace(/^[-\*]\s*/, '').trim()}</div>
+                            ))}
+                          </div>
+                        ) : '-'}
                       </div>
                     </td>
-                    <td className="px-5 py-4 whitespace-nowrap">{v.mortalidade !== undefined ? `${v.mortalidade}%` : '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap">{v.consumoAcumuladoReal !== undefined && v.consumoAcumuladoReal !== null ? v.consumoAcumuladoReal : '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap">{v.mortalidade !== undefined && v.mortalidade !== null ? `${v.mortalidade}%` : '-'}</td>
                     <td className="px-5 py-4 whitespace-nowrap text-xs">{v.comedouro || '-'}</td>
-                    <td className="px-5 py-4 whitespace-nowrap">
-                      {isWarning ? (
-                        <span className="px-2 py-1 bg-amber-100 text-amber-700 text-[10px] font-bold rounded uppercase">
-                          Atenção ({diff}kg)
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded uppercase">
-                          Ótimo
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-4">
-                      <p className="text-xs leading-relaxed" title={v.recomendacao}>
-                        {v.recomendacao}
-                      </p>
-                    </td>
-                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.colaborador}</td>
-                    <td className="px-5 py-4 whitespace-nowrap">
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.colaborador ? v.colaborador.replace(/\s*,\s*/g, ' / ') : '-'}</td>
+                    
+                    {/* Metas e Consumos */}
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.metaAlojamento ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.consumoAlojamento ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.metaCrescimento1 ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.consumoCrescimento1 ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.metaCrescimento2 ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.consumoCrescimento2 ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.metaCrescimento3 ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.consumoCrescimento3 ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.metaTerminacao1 ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.consumoTerminacao1 ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.metaTerminacao2 ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.consumoTerminacao2 ?? '-'}</td>
+                    
+                    <td className="px-5 py-4 whitespace-nowrap text-xs font-semibold">{v.consumoAcumuladoReal ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs font-semibold">{v.metaAcumulada ?? '-'}</td>
+                    
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.pesoAloj ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">{v.pontuacaoSanitaria ?? '-'}</td>
+                    
+                    <td className="px-5 py-4 whitespace-nowrap sticky right-0 bg-white group-hover:bg-slate-50 transition-colors z-10">
                       <div className="flex gap-2">
                         <button 
-                          onClick={() => onEditVisit(v.id)}
+                          onClick={() => {
+                            setDeleteConfirmId(null);
+                            onEditVisit(v.id);
+                          }}
                           className="text-blue-600 hover:text-blue-800 text-xs font-semibold px-2 py-1 rounded hover:bg-blue-50 transition-colors"
                         >
                           Editar
                         </button>
-                        <button 
-                          onClick={() => {
-                            if (window.confirm('Tem certeza que deseja apagar esta visita?')) {
-                              onDeleteVisit(v.id);
-                            }
-                          }}
-                          className="text-red-600 hover:text-red-800 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                        >
-                          Apagar
-                        </button>
+                        {deleteConfirmId === v.id ? (
+                          <div className="flex items-center gap-1">
+                            <button 
+                              onClick={() => {
+                                onDeleteVisit(v.id);
+                                setDeleteConfirmId(null);
+                              }}
+                              className="text-white bg-red-500 hover:bg-red-600 text-[10px] font-bold px-2 py-1 rounded transition-colors"
+                            >
+                              Sim
+                            </button>
+                            <button 
+                              onClick={() => setDeleteConfirmId(null)}
+                              className="text-slate-600 bg-slate-200 hover:bg-slate-300 text-[10px] font-bold px-2 py-1 rounded transition-colors"
+                            >
+                              Não
+                            </button>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={() => setDeleteConfirmId(v.id)}
+                            className="text-red-600 hover:text-red-800 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                          >
+                            Apagar
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
