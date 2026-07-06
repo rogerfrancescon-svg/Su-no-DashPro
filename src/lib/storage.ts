@@ -39,6 +39,12 @@ const formatDate = (dStr: string) => {
 export const storage = {
   syncFromSupabase: async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || session.user.id === 'offline') {
+        console.warn('Cannot sync from Supabase: No active session');
+        return false;
+      }
+
       let allData: any[] = [];
       let page = 0;
       let hasMore = true;
@@ -102,6 +108,8 @@ export const storage = {
             date: dataVisita,
             idade: Number(row['Idade']) || 0,
             animaisAlojados: row['Animais Alojados'] !== null && row['Animais Alojados'] !== undefined ? Number(row['Animais Alojados']) : undefined,
+            animaisMortos: row['Animais Mortos'] !== null && row['Animais Mortos'] !== undefined ? Number(row['Animais Mortos']) : undefined,
+            volumeTotalCargas: row['Vol. Cargas (kg)'] !== null && row['Vol. Cargas (kg)'] !== undefined ? Number(row['Vol. Cargas (kg)']) : undefined,
             recomendacao: row['Recomendação'] || '',
             consumoAcumuladoReal: row['Consumo Acumulado Real'] ?? row['Consumo acumulado'] ?? undefined,
             mortalidade: row['Mortalidade'] ?? undefined,
@@ -151,7 +159,12 @@ export const storage = {
   },
 
   saveVisits: async (visits: Visit[], visitsToSyncToSupabase?: Visit[]): Promise<Visit[]> => {
-    const { data: { session } } = await supabase.auth.getSession();
+    let session = null;
+    try {
+      const res = await supabase.auth.getSession();
+      session = res.data.session;
+    } catch (e) {}
+
     const userId = session?.user?.id;
     
     const integrados = getIntegradosLocal();
@@ -170,6 +183,8 @@ export const storage = {
         'Alojamento': integrado?.alojamentoDate || '',
         'Idade': v.idade,
         'Animais Alojados': v.animaisAlojados ?? null,
+        'Animais Mortos': v.animaisMortos ?? null,
+        'Vol. Cargas (kg)': v.volumeTotalCargas ?? null,
         'Recomendação': v.recomendacao || '',
         'Consumo acumulado': v.consumoAcumuladoReal ?? null,
         'Mortalidade': v.mortalidade ?? null,
@@ -238,7 +253,7 @@ export const storage = {
       }
     } catch (e: any) {
       console.warn('saveVisits failed:', e);
-      throw e;
+      // Do not throw to avoid unhandled rejections
     }
     
     // Save updated visits to local storage

@@ -6,12 +6,13 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 
 interface VisitaFormProps {
   integrados: Integrado[];
+  visits?: Visit[];
   initialData?: Visit;
   onSave: (visit: Visit, integradoNome?: string, alojamentoDate?: string) => void;
   onCancel?: () => void;
 }
 
-export function VisitaForm({ integrados, initialData, onSave, onCancel }: VisitaFormProps) {
+export function VisitaForm({ integrados, visits = [], initialData, onSave, onCancel }: VisitaFormProps) {
   const [formData, setFormData] = useState<Partial<Visit> & { alojamentoDate?: string, integradoNome?: string }>(() => {
     const defaultMetas = {
       metaAlojamento: 17.00,
@@ -68,6 +69,7 @@ export function VisitaForm({ integrados, initialData, onSave, onCancel }: Visita
       mortalidade: visitData.mortalidade !== undefined && visitData.mortalidade !== null ? Number(visitData.mortalidade) : undefined,
       animaisAlojados: visitData.animaisAlojados ? Number(visitData.animaisAlojados) : undefined,
       animaisMortos: visitData.animaisMortos ? Number(visitData.animaisMortos) : undefined,
+      volumeTotalCargas: visitData.volumeTotalCargas ? Number(visitData.volumeTotalCargas) : undefined,
       pesoAloj: visitData.pesoAloj ? Number(visitData.pesoAloj) : undefined,
       pontuacaoSanitaria: visitData.pontuacaoSanitaria ? Number(visitData.pontuacaoSanitaria) : undefined,
     } as Visit, integradoNome, alojamentoDate);
@@ -82,12 +84,61 @@ export function VisitaForm({ integrados, initialData, onSave, onCancel }: Visita
       const integrado = integrados.find(i => i.name.toLowerCase() === value.toLowerCase());
       if (integrado) {
         updates.alojamentoDate = integrado.alojamentoDate;
+        
+        // Find previous visits for this integrado to auto-fill animaisAlojados and animaisMortos
+        const integradoVisits = visits.filter(v => v.integradoId === integrado.id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        if (integradoVisits.length > 0) {
+          const lastVisit = integradoVisits[0];
+          if (lastVisit.animaisAlojados) updates.animaisAlojados = lastVisit.animaisAlojados;
+          if (lastVisit.animaisMortos) updates.animaisMortos = lastVisit.animaisMortos;
+          if (lastVisit.mortalidade) updates.mortalidade = lastVisit.mortalidade;
+          ['pesoAloj', 'pontuacaoSanitaria', 'cargaAlojamento', 'consumoAlojamento', 'cargaCrescimento1', 'consumoCrescimento1', 'cargaCrescimento2', 'consumoCrescimento2', 'cargaCrescimento3', 'consumoCrescimento3', 'cargaTerminacao1', 'consumoTerminacao1', 'cargaTerminacao2', 'consumoTerminacao2', 'volumeTotalCargas', 'consumoAcumuladoReal'].forEach(key => {
+            if (lastVisit[key as keyof typeof lastVisit] !== undefined && lastVisit[key as keyof typeof lastVisit] !== null) updates[key] = lastVisit[key as keyof typeof lastVisit];
+          });
+        }
       }
     }
     
     setFormData(prev => {
       const newData = { ...prev, ...updates };
       
+      // Auto-calculate consumoAcumuladoReal based on volumeTotalCargas
+      
+      // Auto-calculate consumos when cargas change or mortos change
+      const alojados = Number(newData.animaisAlojados) || 0;
+      const mortos = Number(newData.animaisMortos) || 0;
+      const vivos = alojados - mortos;
+      
+      if (alojados > 0) {
+        newData.mortalidade = Number(((mortos / alojados) * 100).toFixed(2));
+      } else {
+        newData.mortalidade = undefined;
+      }
+      
+      if (vivos > 0) {
+        if (newData.cargaAlojamento) newData.consumoAlojamento = Number((Number(newData.cargaAlojamento) / vivos).toFixed(2));
+        if (newData.cargaCrescimento1) newData.consumoCrescimento1 = Number((Number(newData.cargaCrescimento1) / vivos).toFixed(2));
+        if (newData.cargaCrescimento2) newData.consumoCrescimento2 = Number((Number(newData.cargaCrescimento2) / vivos).toFixed(2));
+        if (newData.cargaCrescimento3) newData.consumoCrescimento3 = Number((Number(newData.cargaCrescimento3) / vivos).toFixed(2));
+        if (newData.cargaTerminacao1) newData.consumoTerminacao1 = Number((Number(newData.cargaTerminacao1) / vivos).toFixed(2));
+        if (newData.cargaTerminacao2) newData.consumoTerminacao2 = Number((Number(newData.cargaTerminacao2) / vivos).toFixed(2));
+        
+        // volumeTotalCargas is now the sum of all specific cargas if not explicitly overridden, or we can just calculate it:
+        const sumCargas = (Number(newData.cargaAlojamento) || 0) + (Number(newData.cargaCrescimento1) || 0) + (Number(newData.cargaCrescimento2) || 0) + (Number(newData.cargaCrescimento3) || 0) + (Number(newData.cargaTerminacao1) || 0) + (Number(newData.cargaTerminacao2) || 0);
+        
+        if (sumCargas > 0 && !['volumeTotalCargas', 'consumoAcumuladoReal'].includes(name)) {
+           newData.volumeTotalCargas = sumCargas;
+           newData.consumoAcumuladoReal = Number((sumCargas / vivos).toFixed(2));
+        } else {
+           const volume = Number(newData.volumeTotalCargas) || 0;
+           if (volume > 0) {
+             newData.consumoAcumuladoReal = Number((volume / vivos).toFixed(2));
+           } else if (name === 'volumeTotalCargas' && !newData.volumeTotalCargas) {
+             newData.consumoAcumuladoReal = undefined;
+           }
+        }
+      }
+
       if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') && newData.date && newData.alojamentoDate) {
          const [vY, vM, vD] = newData.date.split('-');
          const [aY, aM, aD] = newData.alojamentoDate.split('-');
@@ -158,6 +209,20 @@ export function VisitaForm({ integrados, initialData, onSave, onCancel }: Visita
           </div>
         </div>
 
+        {formData.integradoNome && (
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex flex-col md:flex-row md:justify-between items-center text-sm -mt-2">
+             <div className="flex flex-col gap-1 text-slate-600">
+                <span className="font-medium text-slate-800 mb-1">Resumo Automático do Lote</span>
+                <span className="flex items-center gap-2">Idade calculada: <strong className="text-blue-900">{currentIdade} dias</strong></span>
+                <span className="flex items-center gap-2">Animais Vivos: <strong className="text-blue-900">{(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0)}</strong> <span className="text-xs text-slate-500">({formData.animaisAlojados || 0} alojados)</span></span>
+             </div>
+             <div className="flex flex-col gap-1 text-slate-600 md:text-right mt-3 md:mt-0">
+                <span className="flex items-center gap-2 justify-end">Consumo Esperado: <strong className="text-blue-900">{expectedConsumption || '-'} kg/cab</strong></span>
+                <span className="flex items-center gap-2 justify-end">Consumo Real (Calculado): <strong className={formData.consumoAcumuladoReal && expectedConsumption && formData.consumoAcumuladoReal < expectedConsumption ? 'text-red-600' : 'text-green-600'}>{formData.consumoAcumuladoReal || '-'} kg/cab</strong></span>
+             </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="space-y-2">
             <label className="block text-xs font-semibold text-slate-500 mb-1">Idade (Dias)</label>
@@ -173,22 +238,7 @@ export function VisitaForm({ integrados, initialData, onSave, onCancel }: Visita
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Consumo Acumulado (kg)</label>
-            <input 
-              type="number" 
-              step="0.01"
-              name="consumoAcumuladoReal"
-              value={formData.consumoAcumuladoReal ?? ''}
-              onChange={handleChange}
-              className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-            {expectedConsumption !== null && (
-               <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
-                 <Info className="w-3 h-3"/> Esperado: ~{expectedConsumption}kg
-               </p>
-            )}
-          </div>
+          
 
           <div className="space-y-2">
             <label className="block text-xs font-semibold text-slate-500 mb-1">Animais Alojados</label>
@@ -196,14 +246,7 @@ export function VisitaForm({ integrados, initialData, onSave, onCancel }: Visita
               type="number" 
               name="animaisAlojados"
               value={formData.animaisAlojados || ''}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                setFormData(prev => {
-                  const mortos = Number(prev.animaisMortos) || 0;
-                  const mortalidade = val > 0 ? Number(((mortos / val) * 100).toFixed(2)) : undefined;
-                  return { ...prev, animaisAlojados: val || undefined, mortalidade };
-                });
-              }}
+              onChange={handleChange}
               placeholder="Ex: 1000"
               className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             />
@@ -213,21 +256,14 @@ export function VisitaForm({ integrados, initialData, onSave, onCancel }: Visita
             <label className="block text-xs font-semibold text-slate-500 mb-1 flex justify-between items-center">
               <span>Animais Mortos</span>
               {formData.mortalidade !== undefined && formData.mortalidade !== null && !isNaN(Number(formData.mortalidade)) && (
-                <span className="text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded">{formData.mortalidade}%</span>
+                <span className="flex items-center gap-2"><span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[10px]">{(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0)} vivos</span><span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded text-[10px]">{formData.mortalidade}%</span></span>
               )}
             </label>
             <input 
               type="number" 
               name="animaisMortos"
               value={formData.animaisMortos ?? ''}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                setFormData(prev => {
-                  const aloj = Number(prev.animaisAlojados) || 0;
-                  const mortalidade = aloj > 0 ? Number(((val / aloj) * 100).toFixed(2)) : undefined;
-                  return { ...prev, animaisMortos: e.target.value === '' ? undefined : val, mortalidade };
-                });
-              }}
+              onChange={handleChange}
               placeholder="Ex: 5"
               className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             />
@@ -285,65 +321,55 @@ export function VisitaForm({ integrados, initialData, onSave, onCancel }: Visita
             />
           </div>
 
-          <h3 className="text-sm font-bold text-slate-700">Consumos e Metas (kg/cab)</h3>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Meta Aloj</label>
-              <input type="number" step="0.01" name="metaAlojamento" value={formData.metaAlojamento || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Cons. Aloj</label>
-              <input type="number" step="0.01" name="consumoAlojamento" value={formData.consumoAlojamento || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Meta Cresc 1</label>
-              <input type="number" step="0.01" name="metaCrescimento1" value={formData.metaCrescimento1 || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Cons. Cresc 1</label>
-              <input type="number" step="0.01" name="consumoCrescimento1" value={formData.consumoCrescimento1 || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Meta Cresc 2</label>
-              <input type="number" step="0.01" name="metaCrescimento2" value={formData.metaCrescimento2 || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Cons. Cresc 2</label>
-              <input type="number" step="0.01" name="consumoCrescimento2" value={formData.consumoCrescimento2 || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Meta Cresc 3</label>
-              <input type="number" step="0.01" name="metaCrescimento3" value={formData.metaCrescimento3 || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Cons. Cresc 3</label>
-              <input type="number" step="0.01" name="consumoCrescimento3" value={formData.consumoCrescimento3 || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Meta Term 1</label>
-              <input type="number" step="0.01" name="metaTerminacao1" value={formData.metaTerminacao1 || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Cons. Term 1</label>
-              <input type="number" step="0.01" name="consumoTerminacao1" value={formData.consumoTerminacao1 || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Meta Term 2</label>
-              <input type="number" step="0.01" name="metaTerminacao2" value={formData.metaTerminacao2 || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Cons. Term 2</label>
-              <input type="number" step="0.01" name="consumoTerminacao2" value={formData.consumoTerminacao2 || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Meta Acumulada</label>
-              <input type="number" step="0.01" name="metaAcumulada" value={formData.metaAcumulada || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase">Cons. Acum Real</label>
-              <input type="number" step="0.01" name="consumoAcumuladoReal" value={formData.consumoAcumuladoReal || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
+          <h3 className="text-sm font-bold text-slate-700">Lançamento de Cargas e Consumo (kg)</h3>
+          <div className="overflow-x-auto w-full -ml-2 -mr-2 md:mx-0 pr-4 md:pr-0">
+            <table className="w-full text-sm text-left border-collapse min-w-[500px]">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="py-2 pr-2 md:pr-4 pl-2 font-semibold text-slate-500 uppercase text-[10px]">Fase</th>
+                  <th className="py-2 pr-2 md:pr-4 font-semibold text-slate-500 uppercase text-[10px] w-1/4">Carga Total (kg)</th>
+                  <th className="py-2 pr-2 md:pr-4 font-semibold text-slate-500 uppercase text-[10px] w-1/4">Cons. Real (kg/cab)</th>
+                  <th className="py-2 pr-2 md:pr-4 font-semibold text-slate-500 uppercase text-[10px]">Meta Ref. (kg)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[
+                  { id: 'Alojamento', label: 'Alojamento', metaKey: 'metaAlojamento', cargaKey: 'cargaAlojamento', consKey: 'consumoAlojamento' },
+                  { id: 'Crescimento1', label: 'Crescimento 1', metaKey: 'metaCrescimento1', cargaKey: 'cargaCrescimento1', consKey: 'consumoCrescimento1' },
+                  { id: 'Crescimento2', label: 'Crescimento 2', metaKey: 'metaCrescimento2', cargaKey: 'cargaCrescimento2', consKey: 'consumoCrescimento2' },
+                  { id: 'Crescimento3', label: 'Crescimento 3', metaKey: 'metaCrescimento3', cargaKey: 'cargaCrescimento3', consKey: 'consumoCrescimento3' },
+                  { id: 'Terminacao1', label: 'Terminação 1', metaKey: 'metaTerminacao1', cargaKey: 'cargaTerminacao1', consKey: 'consumoTerminacao1' },
+                  { id: 'Terminacao2', label: 'Terminação 2', metaKey: 'metaTerminacao2', cargaKey: 'cargaTerminacao2', consKey: 'consumoTerminacao2' },
+                ].map((phase) => (
+                  <tr key={phase.id} className="hover:bg-slate-50">
+                    <td className="py-2 pr-2 md:pr-4 pl-2 font-medium text-slate-700 text-xs md:text-sm">{phase.label}</td>
+                    <td className="py-2 pr-2 md:pr-4">
+                      <input type="number" step="0.01" name={phase.cargaKey} value={(formData as any)[phase.cargaKey] || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00" />
+                    </td>
+                    <td className="py-2 pr-2 md:pr-4">
+                      <input type="number" step="0.01" name={phase.consKey} value={(formData as any)[phase.consKey] || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-xs md:text-sm bg-slate-50 text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none" readOnly placeholder="0.00" />
+                    </td>
+                    <td className="py-2 pr-2 md:pr-4 text-slate-500 text-xs md:text-sm">
+                      {(formData as any)[phase.metaKey] || '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t-2 border-slate-200 font-semibold bg-slate-50">
+                <tr>
+                  <td className="py-3 pr-2 md:pr-4 pl-2 text-slate-700 text-xs md:text-sm">TOTAL ACUMULADO</td>
+                  <td className="py-3 pr-2 md:pr-4">
+                    <input type="number" step="0.01" name="volumeTotalCargas" value={formData.volumeTotalCargas || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-xs md:text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00" />
+                  </td>
+                  <td className="py-3 pr-2 md:pr-4">
+                    <input type="number" step="0.01" name="consumoAcumuladoReal" value={formData.consumoAcumuladoReal || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-xs md:text-sm font-bold bg-slate-100 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" readOnly placeholder="0.00" />
+                  </td>
+                  <td className="py-3 pr-2 md:pr-4 text-slate-500 text-xs md:text-sm">
+                    {formData.metaAcumulada || '-'}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </div>
 

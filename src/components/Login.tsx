@@ -23,12 +23,12 @@ export function Login() {
           password,
         });
         if (error) {
-          if (error.message === 'Failed to fetch') {
+          if ((error?.message?.includes('fetch') || error?.message?.includes('Failed') || error?.code === '0' || String(error).includes('fetch') || String(error).includes('Failed'))) {
             // Bypass to offline mode
             window.dispatchEvent(new CustomEvent('offline-login'));
             return;
           }
-          throw error;
+          throw new Error(error.message || JSON.stringify(error));
         }
         setMessage('Conta criada com sucesso! Verifique seu email ou faça login.');
       } else {
@@ -37,16 +37,16 @@ export function Login() {
           password,
         });
         if (error) {
-          if (error.message === 'Failed to fetch') {
+          if ((error?.message?.includes('fetch') || error?.message?.includes('Failed') || error?.code === '0' || String(error).includes('fetch') || String(error).includes('Failed'))) {
             // Bypass to offline mode
             window.dispatchEvent(new CustomEvent('offline-login'));
             return;
           }
-          throw error;
+          throw new Error(error.message || JSON.stringify(error));
         }
       }
     } catch (err: any) {
-      if (err.message === 'Failed to fetch') {
+      if ((err?.message?.includes('fetch') || err?.message?.includes('Failed') || err?.code === '0' || String(err).includes('fetch') || String(err).includes('Failed'))) {
         window.dispatchEvent(new CustomEvent('offline-login'));
         return;
       }
@@ -68,7 +68,7 @@ export function Login() {
           {isSignUp ? 'Criar nova conta' : 'Acesse sua conta'}
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          AgriDash Pro - Gestão Agropecuária
+          Suíno DashPro - Gestão Agropecuária
         </p>
       </div>
 

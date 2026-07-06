@@ -1,5 +1,5 @@
 {
-  "name": "AgriDash Pro",
+  "name": "Suíno DashPro",
   "description": "Gestão e acompanhamento dinâmico de lotes de animais no campo, com análise de curva de consumo baseada na tabela Cargill. Permite lançamento e visualização de dados via dashboard preciso.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

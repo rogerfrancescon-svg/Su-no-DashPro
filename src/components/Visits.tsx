@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
 import { Visit, Integrado } from '../types';
 import { getExpectedConsumption } from '../data';
-import { Search, ArrowUpDown } from 'lucide-react';
+import { Search, ArrowUpDown, Download, Plus } from 'lucide-react';
 
 interface VisitsListProps {
   visits: Visit[];
   integrados: Integrado[];
   onEditVisit: (id: string) => void;
   onDeleteVisit: (id: string) => void;
+  onNewVisit?: () => void;
+  onExport?: () => void;
 }
 
 type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'idade-desc' | 'idade-asc';
 
-export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit }: VisitsListProps) {
+export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onNewVisit, onExport }: VisitsListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('date-desc');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -48,13 +50,13 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit }: V
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
-         <div className="flex items-center gap-2 text-sm text-slate-500 bg-white border border-slate-200 px-3 py-2 rounded">
+      <div className="flex flex-col sm:flex-row gap-3 justify-between items-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+         <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50 border border-slate-200 px-3 py-2 rounded flex-1 sm:flex-none">
            <ArrowUpDown className="w-4 h-4" />
            <select 
              value={sortBy}
              onChange={(e) => setSortBy(e.target.value as SortOption)}
-             className="bg-transparent outline-none cursor-pointer text-slate-700"
+             className="bg-transparent outline-none cursor-pointer text-slate-700 w-full"
            >
              <option value="date-desc">Data (Mais recentes)</option>
              <option value="date-asc">Data (Mais antigas)</option>
@@ -64,7 +66,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit }: V
              <option value="idade-asc">Idade (Menor)</option>
            </select>
          </div>
-         <div className="relative w-full sm:max-w-sm">
+         <div className="relative w-full sm:max-w-md flex-1">
            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
            <input 
              type="text" 
@@ -74,9 +76,26 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit }: V
              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white"
            />
          </div>
+         <div className="flex gap-2 w-full sm:w-auto">
+            {onExport && (
+              <button 
+                onClick={onExport} 
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white text-slate-700 border border-slate-200 px-4 py-2 rounded text-sm font-semibold hover:bg-slate-50 transition-colors shadow-sm"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden lg:inline">Exportar</span>
+              </button>
+            )}
+            {onNewVisit && (
+              <button onClick={onNewVisit} className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-slate-900 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-slate-800 transition-colors">
+                <Plus className="w-4 h-4" />
+                <span>Novo Lançamento</span>
+              </button>
+            )}
+         </div>
       </div>
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-auto max-h-[calc(100vh-240px)]">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex-1">
+        <div className="overflow-auto max-h-[calc(100vh-180px)]">
         <table className="w-full text-left text-sm text-slate-600 min-w-[3000px] relative">
           <thead className="bg-slate-50 text-slate-700 font-medium sticky top-0 z-20 shadow-sm">
             <tr>
@@ -85,9 +104,10 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit }: V
                 <th className="px-5 py-4 border-b border-slate-200">Alojamento</th>
                 <th className="px-5 py-4 border-b border-slate-200">Idade</th>
                 <th className="px-5 py-4 border-b border-slate-200">Animais Alojados</th>
-                <th className="px-5 py-4 border-b border-slate-200 min-w-[300px]">Recomendação</th>
-                <th className="px-5 py-4 border-b border-slate-200">Consumo acumulado</th>
-                <th className="px-5 py-4 border-b border-slate-200">% Mortalidade</th>
+                <th className="px-5 py-4 border-b border-slate-200">Recomendação</th>
+                <th className="px-5 py-4 border-b border-slate-200">Vol. Cargas (kg)</th>
+                <th className="px-5 py-4 border-b border-slate-200">Consumo Acumulado (kg/cab)</th>
+                <th className="px-5 py-4 border-b border-slate-200">Mortos</th>
                 <th className="px-5 py-4 border-b border-slate-200">Comedouro</th>
                 <th className="px-5 py-4 border-b border-slate-200">Colaborador</th>
                 <th className="px-5 py-4 border-b border-slate-200">Meta Aloj</th>
@@ -128,7 +148,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit }: V
                     <td className="px-5 py-4 whitespace-nowrap">{v.idade}</td>
                     <td className="px-5 py-4 whitespace-nowrap">{v.animaisAlojados || '-'}</td>
                     <td className="px-5 py-4">
-                      <div className="text-xs leading-relaxed" title={v.recomendacao}>
+                      <div className="text-xs leading-relaxed min-w-[300px]" title={v.recomendacao}>
                         {v.recomendacao ? (
                           <div className="space-y-1">
                             {v.recomendacao.split('\n').filter(l => l.trim()).map((line, i) => (
@@ -138,8 +158,9 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit }: V
                         ) : '-'}
                       </div>
                     </td>
+                    <td className="px-5 py-4 whitespace-nowrap">{v.volumeTotalCargas !== undefined && v.volumeTotalCargas !== null ? v.volumeTotalCargas : '-'}</td>
                     <td className="px-5 py-4 whitespace-nowrap">{v.consumoAcumuladoReal !== undefined && v.consumoAcumuladoReal !== null ? v.consumoAcumuladoReal : '-'}</td>
-                    <td className="px-5 py-4 whitespace-nowrap">{v.mortalidade !== undefined && v.mortalidade !== null ? `${v.mortalidade}%` : '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap">{v.animaisMortos !== undefined && v.animaisMortos !== null ? v.animaisMortos : '-'}</td>
                     <td className="px-5 py-4 whitespace-nowrap text-xs">{v.comedouro || '-'}</td>
                     <td className="px-5 py-4 whitespace-nowrap text-xs">{v.colaborador ? v.colaborador.replace(/\s*,\s*/g, ' / ') : '-'}</td>
                     

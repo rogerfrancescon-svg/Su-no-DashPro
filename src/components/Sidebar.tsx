@@ -21,9 +21,9 @@ export function Sidebar({ currentTab, setCurrentTab }: SidebarProps) {
       <div className="p-6">
         <div className="flex items-center gap-2 mb-8">
           <div className="h-8 w-8 bg-blue-500 rounded flex items-center justify-center font-bold text-white">
-            P
+            S
           </div>
-          <span className="text-white font-semibold text-lg tracking-tight">PASTRE AGRO</span>
+          <span className="text-white font-semibold text-lg tracking-tight">Suíno DashPro</span>
         </div>
       </div>
 

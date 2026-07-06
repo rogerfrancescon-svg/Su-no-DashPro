@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Integrado, Visit } from '../types';
 import { getExpectedConsumption } from '../data';
-import { Users, ClipboardList } from 'lucide-react';
+import { Users, ClipboardList, Search, Filter, ArrowUpDown } from 'lucide-react';
 
 interface IntegradosProps {
   integrados: Integrado[];
@@ -12,6 +12,7 @@ interface IntegradosProps {
 }
 
 export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete }: IntegradosProps) {
+  
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editLoteNumber, setEditLoteNumber] = useState('');
@@ -19,6 +20,24 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
   const [editStatus, setEditStatus] = useState<'Em andamento' | 'Fechado'>('Em andamento');
   const [editFechamentoDate, setEditFechamentoDate] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'Todos' | 'Em andamento' | 'Fechado'>('Todos');
+  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'name-asc' | 'name-desc'>('date-desc');
+
+  const filteredIntegrados = [...integrados].filter(i => {
+    if (filterStatus !== 'Todos' && i.status !== filterStatus) return false;
+    if (searchTerm && !i.name.toLowerCase().includes(searchTerm.toLowerCase()) && !(i.loteNumber && i.loteNumber.toLowerCase().includes(searchTerm.toLowerCase()))) return false;
+    return true;
+  }).sort((a, b) => {
+    switch (sortBy) {
+      case 'date-desc': return new Date(b.alojamentoDate).getTime() - new Date(a.alojamentoDate).getTime();
+      case 'date-asc': return new Date(a.alojamentoDate).getTime() - new Date(b.alojamentoDate).getTime();
+      case 'name-asc': return a.name.localeCompare(b.name);
+      case 'name-desc': return b.name.localeCompare(a.name);
+      default: return 0;
+    }
+  });
+
 
   return (
     <div className="space-y-6">
@@ -36,7 +55,46 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
         </div>
       </div>
 
+      
+      <div className="flex flex-col sm:flex-row gap-3 justify-between items-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50 border border-slate-200 px-3 py-2 rounded flex-1 sm:flex-none">
+          <Filter className="w-4 h-4" />
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as any)}
+            className="bg-transparent outline-none cursor-pointer text-slate-700 w-full"
+          >
+            <option value="Todos">Todos os status</option>
+            <option value="Em andamento">Em andamento</option>
+            <option value="Fechado">Fechado</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50 border border-slate-200 px-3 py-2 rounded flex-1 sm:flex-none">
+          <ArrowUpDown className="w-4 h-4" />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="bg-transparent outline-none cursor-pointer text-slate-700 w-full"
+          >
+            <option value="date-desc">Alojamento (Mais recente)</option>
+            <option value="date-asc">Alojamento (Mais antigo)</option>
+            <option value="name-asc">Nome (A-Z)</option>
+            <option value="name-desc">Nome (Z-A)</option>
+          </select>
+        </div>
+        <div className="relative w-full sm:max-w-md flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Buscar por nome ou lote..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white"
+          />
+        </div>
+      </div>
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-600 min-w-[700px]">
             <thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200">
@@ -52,7 +110,7 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {integrados.map(i => {
+              {filteredIntegrados.map(i => {
                 const [aY, aM, aD] = i.alojamentoDate.split('-');
                 const alojaDate = new Date(Number(aY), Number(aM) - 1, Number(aD));
                 const today = new Date();
@@ -299,7 +357,7 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
             </tbody>
           </table>
         </div>
-        {integrados.length === 0 && (
+        {filteredIntegrados.length === 0 && (
           <div className="p-8 text-center text-slate-500">
             Nenhum integrado cadastrado ainda.
           </div>

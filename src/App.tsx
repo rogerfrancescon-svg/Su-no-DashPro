@@ -30,7 +30,7 @@ export default function App() {
     try {
       const { error } = await supabase.from('registros').select('id').limit(1);
       if (error) {
-        if (error.message === 'Failed to fetch') {
+        if ((error?.message?.includes('fetch') || error?.message?.includes('Failed') || error?.code === '0' || String(error).includes('fetch') || String(error).includes('Failed'))) {
           setDbError(null); // Ignore in offline mode
         } else {
           setDbError(`Erro ao conectar com a tabela 'registros': ${error.message}`);
@@ -39,7 +39,7 @@ export default function App() {
         setDbError(null);
       }
     } catch (err: any) {
-      if (err.message !== 'Failed to fetch') {
+      if (!(err?.message?.includes('fetch') || err?.message?.includes('Failed') || err?.code === '0' || String(err).includes('fetch') || String(err).includes('Failed'))) {
         setDbError(`Falha inesperada ao conectar: ${err.message}`);
       }
     }
@@ -54,7 +54,7 @@ export default function App() {
       setIntegrados(dataIntegrados);
       setVisits(dataVisits);
     } catch (e) {
-      console.error(e);
+      console.warn('loadData failed', e);
     } finally {
       setLoading(false);
     }
@@ -66,9 +66,8 @@ export default function App() {
       loadData();
     };
     window.addEventListener('offline-login', handleOfflineLogin);
-
     supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error && error.message === 'Failed to fetch') {
+      if (error && (error?.message?.includes('fetch') || error?.message?.includes('Failed') || error?.code === '0' || String(error).includes('fetch') || String(error).includes('Failed'))) {
         handleOfflineLogin();
       } else {
         setSession(session);
@@ -79,7 +78,7 @@ export default function App() {
         }
       }
     }).catch((err) => {
-      if (err?.message === 'Failed to fetch') {
+      if ((err?.message?.includes('fetch') || err?.message?.includes('Failed') || err?.code === '0' || String(err).includes('fetch') || String(err).includes('Failed'))) {
         handleOfflineLogin();
       } else {
         setLoading(false);
@@ -200,7 +199,7 @@ export default function App() {
         'Animais Alojados': v.animaisAlojados || '',
         'Recomendação': v.recomendacao || '',
         'Consumo acumulado': v.consumoAcumuladoReal ?? '',
-        '% Mortalidade': v.mortalidade ?? '',
+        'Animais Mortos': v.animaisMortos ?? '',
         'Comedouro': v.comedouro || '',
         'Colaborador': v.colaborador ? v.colaborador.replace(/\s*,\s*/g, ' / ') : '',
         'Meta Aloj': v.metaAlojamento || '',
@@ -256,6 +255,7 @@ export default function App() {
             <div className="space-y-6">
               <VisitaForm 
                 integrados={integrados} 
+                visits={visits}
                 initialData={visitToEdit}
                 onSave={editingVisitId ? handleUpdateVisit : handleAddVisit} 
                 onCancel={() => { setIsVisitFormOpen(false); setEditingVisitId(null); }}
@@ -264,23 +264,15 @@ export default function App() {
           );
         }
         return (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-              <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Lançamentos</h2>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-                <button 
-                  onClick={handleExport} 
-                  className="flex items-center gap-2 bg-white text-slate-700 border border-slate-200 px-4 py-2 rounded text-sm font-semibold hover:bg-slate-50 transition-colors shadow-sm"
-                >
-                  <Download className="w-4 h-4" />
-                  Exportar
-                </button>
-                <button onClick={() => { setEditingVisitId(null); setIsVisitFormOpen(true); }} className="bg-slate-900 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-slate-800 transition-colors">
-                  + Novo Lançamento
-                </button>
-              </div>
-            </div>
-            <VisitsList visits={visits} integrados={integrados} onEditVisit={handleEditVisitClick} onDeleteVisit={handleDeleteVisit} />
+          <div className="space-y-4">
+            <VisitsList 
+              visits={visits} 
+              integrados={integrados} 
+              onEditVisit={handleEditVisitClick} 
+              onDeleteVisit={handleDeleteVisit} 
+              onExport={handleExport}
+              onNewVisit={() => { setEditingVisitId(null); setIsVisitFormOpen(true); }}
+            />
           </div>
         )
       }
