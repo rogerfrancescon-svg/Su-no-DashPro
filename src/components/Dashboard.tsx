@@ -386,7 +386,8 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
                   verticalAlign="top" 
                   height={36} 
                   iconType="circle" 
-                  payload={ (
+                  // @ts-ignore
+                  payload={[
                     { value: 'Curva Alvo', type: 'circle', id: 'consumoEsperado', color: '#94a3b8' },
                     ...Array.from(new Map(filteredIntegrados.map((integrado, index) => {
                       const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
@@ -406,7 +407,7 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
                         color: colors[index % colors.length]
                       }];
                     })).values()) as any[]
-                  ]}
+                  ] as any[]}
                 />
               )}
               <Area type="monotone" dataKey="consumoEsperadoRange" name="Margem de Erro (±5kg)" stroke="none" fill="#cbd5e1" fillOpacity={0.3} activeDot={false} />
@@ -466,7 +467,7 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
                     fill="#64748b" 
                     fontSize={10} 
                     fontWeight={500}
-                    formatter={(val: number) => val > 0 ? `+${Number(val).toFixed(1)}` : Number(val).toFixed(1)}
+                    formatter={(val: any) => val > 0 ? `+${Number(val).toFixed(1)}` : Number(val).toFixed(1)}
                   />
                 </Bar>
               </BarChart>

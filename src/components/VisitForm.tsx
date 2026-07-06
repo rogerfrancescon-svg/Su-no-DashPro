@@ -413,7 +413,7 @@ export function VisitaForm({ integrados, initialData, onSave, onCancel }: Visita
                   <YAxis label={{ value: 'Consumo (kg)', angle: -90, position: 'insideLeft' }} stroke="#64748b" fontSize={12} />
                   <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                   <Line type="monotone" dataKey="consumoAcumulado" stroke="#3b82f6" strokeWidth={3} dot={{ r: 0 }} activeDot={{ r: 4 }} name="Esperado" />
-                  {formData.consumoAcumuladoReal !== undefined && formData.consumoAcumuladoReal !== '' && (
+                  {formData.consumoAcumuladoReal !== undefined && String(formData.consumoAcumuladoReal) !== '' && (
                     <ReferenceDot 
                       x={currentIdade} 
                       y={Number(formData.consumoAcumuladoReal)} 
@@ -421,7 +421,7 @@ export function VisitaForm({ integrados, initialData, onSave, onCancel }: Visita
                       fill={Number(formData.consumoAcumuladoReal) >= (expectedConsumption || 0) ? "#22c55e" : "#ef4444"} 
                       stroke="white" 
                       strokeWidth={2}
-                      isFront 
+                       
                     />
                   )}
                 </LineChart>
