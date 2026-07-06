@@ -222,32 +222,36 @@ export const storage = {
     }
 
     try {
-      if (toUpdate.length > 0) {
-        for (let i = 0; i < toUpdate.length; i += 500) {
-          const chunk = toUpdate.slice(i, i + 500);
-          const { error } = await supabase.from('registros').upsert(chunk);
-          if (error) {
-            console.warn('Supabase upsert error:', error);
-            throw new Error(error.message);
+      if (!session || session.user?.id === 'offline') {
+        console.warn('Offline mode: skipping saveVisits to Supabase');
+      } else {
+        if (toUpdate.length > 0) {
+          for (let i = 0; i < toUpdate.length; i += 500) {
+            const chunk = toUpdate.slice(i, i + 500);
+            const { error } = await supabase.from('registros').upsert(chunk);
+            if (error) {
+              console.warn('Supabase upsert error:', error);
+              throw new Error(error.message);
+            }
           }
         }
-      }
-      if (toInsert.length > 0) {
-        let insertedRows: any[] = [];
-        for (let i = 0; i < toInsert.length; i += 500) {
-          const chunk = toInsert.slice(i, i + 500);
-          const { data, error } = await supabase.from('registros').insert(chunk).select('id');
-          if (error) {
-            console.warn('Supabase insert error:', error);
-            throw new Error(error.message);
+        if (toInsert.length > 0) {
+          let insertedRows: any[] = [];
+          for (let i = 0; i < toInsert.length; i += 500) {
+            const chunk = toInsert.slice(i, i + 500);
+            const { data, error } = await supabase.from('registros').insert(chunk).select('id');
+            if (error) {
+              console.warn('Supabase insert error:', error);
+              throw new Error(error.message);
+            }
+            if (data) insertedRows = insertedRows.concat(data);
           }
-          if (data) insertedRows = insertedRows.concat(data);
-        }
-        
-        // Update local visits with real IDs
-        if (insertedRows.length === originalVisitsWithFakeIds.length) {
-          for (let i = 0; i < insertedRows.length; i++) {
-            originalVisitsWithFakeIds[i].id = insertedRows[i].id;
+          
+          // Update local visits with real IDs
+          if (insertedRows.length === originalVisitsWithFakeIds.length) {
+            for (let i = 0; i < insertedRows.length; i++) {
+              originalVisitsWithFakeIds[i].id = insertedRows[i].id;
+            }
           }
         }
       }
@@ -273,16 +277,21 @@ export const storage = {
     localStorage.setItem(VISITS_KEY, JSON.stringify(visits));
     
     try {
-      if (visitIds && visitIds.length > 0) {
-        for (let i = 0; i < visitIds.length; i += 500) {
-          const chunk = visitIds.slice(i, i + 500);
-          await supabase.from('registros').delete().in('id', chunk);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || session.user?.id === 'offline') {
+        console.warn('Offline mode: skipping deleteIntegrado from Supabase');
+      } else {
+        if (visitIds && visitIds.length > 0) {
+          for (let i = 0; i < visitIds.length; i += 500) {
+            const chunk = visitIds.slice(i, i + 500);
+            await supabase.from('registros').delete().in('id', chunk);
+          }
         }
+        // Always delete by Integrado name as a fallback to catch any orphaned records
+        await supabase.from('registros')
+          .delete()
+          .eq('Integrado', toDelete.name);
       }
-      // Always delete by Integrado name as a fallback to catch any orphaned records
-      await supabase.from('registros')
-        .delete()
-        .eq('Integrado', toDelete.name);
     } catch (e) {}
   },
 
@@ -290,7 +299,12 @@ export const storage = {
     const visits = getVisitsLocal().filter(v => v.id !== id);
     localStorage.setItem(VISITS_KEY, JSON.stringify(visits));
     try {
-      await supabase.from('registros').delete().eq('id', id);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || session.user?.id === 'offline') {
+        console.warn('Offline mode: skipping deleteVisit from Supabase');
+      } else {
+        await supabase.from('registros').delete().eq('id', id);
+      }
     } catch (e) {}
   },
 
@@ -298,7 +312,12 @@ export const storage = {
     localStorage.removeItem(INTEGRADOS_KEY);
     localStorage.removeItem(VISITS_KEY);
     try {
-      await supabase.from('registros').delete().neq('id', '0');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || session.user?.id === 'offline') {
+        console.warn('Offline mode: skipping clearAll from Supabase');
+      } else {
+        await supabase.from('registros').delete().neq('id', '0');
+      }
     } catch (e) {}
   }
 };
