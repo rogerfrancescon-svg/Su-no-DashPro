@@ -9,7 +9,7 @@ interface VisitsListProps {
   onEditVisit: (id: string) => void;
   onDeleteVisit: (id: string) => void;
   onNewVisit?: () => void;
-  onExport?: () => void;
+  onExport?: (data?: Visit[]) => void;
 }
 
 type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'idade-desc' | 'idade-asc';
@@ -79,7 +79,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
          <div className="flex gap-2 w-full sm:w-auto">
             {onExport && (
               <button 
-                onClick={onExport} 
+                onClick={() => onExport && onExport(filteredVisits)} 
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white text-slate-700 border border-slate-200 px-4 py-2 rounded text-sm font-semibold hover:bg-slate-50 transition-colors shadow-sm"
               >
                 <Download className="w-4 h-4" />
@@ -104,10 +104,10 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
                 <th className="px-5 py-4 border-b border-slate-200">Alojamento</th>
                 <th className="px-5 py-4 border-b border-slate-200">Idade</th>
                 <th className="px-5 py-4 border-b border-slate-200">Animais Alojados</th>
-                <th className="px-5 py-4 border-b border-slate-200">Recomendação</th>
+                <th className="px-5 py-4 border-b border-slate-200">Animais Mortos</th>
                 <th className="px-5 py-4 border-b border-slate-200">Vol. Cargas (kg)</th>
-                <th className="px-5 py-4 border-b border-slate-200">Consumo Acumulado (kg/cab)</th>
-                <th className="px-5 py-4 border-b border-slate-200">Mortos</th>
+                <th className="px-5 py-4 border-b border-slate-200">Recomendação</th>
+                <th className="px-5 py-4 border-b border-slate-200">Consumo acumulado</th>
                 <th className="px-5 py-4 border-b border-slate-200">Comedouro</th>
                 <th className="px-5 py-4 border-b border-slate-200">Colaborador</th>
                 <th className="px-5 py-4 border-b border-slate-200">Meta Aloj</th>
@@ -122,7 +122,6 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
                 <th className="px-5 py-4 border-b border-slate-200">Cons. Term 1</th>
                 <th className="px-5 py-4 border-b border-slate-200">Meta Term 2</th>
                 <th className="px-5 py-4 border-b border-slate-200">Cons. Term 2</th>
-                <th className="px-5 py-4 border-b border-slate-200">Cons. Acum. Real</th>
                 <th className="px-5 py-4 border-b border-slate-200">Meta Acum.</th>
                 <th className="px-5 py-4 border-b border-slate-200">Peso aloj</th>
                 <th className="px-5 py-4 border-b border-slate-200">Pontuação Sanitária</th>
@@ -146,9 +145,11 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
                     <td className="px-5 py-4 font-medium text-slate-800">{integrado?.name || 'Desconhecido'}</td>
                     <td className="px-5 py-4 whitespace-nowrap text-slate-600">{integrado?.alojamentoDate ? new Date(Number(integrado.alojamentoDate.split('-')[0]), Number(integrado.alojamentoDate.split('-')[1]) - 1, Number(integrado.alojamentoDate.split('-')[2])).toLocaleDateString('pt-BR') : '-'}</td>
                     <td className="px-5 py-4 whitespace-nowrap">{v.idade}</td>
-                    <td className="px-5 py-4 whitespace-nowrap">{v.animaisAlojados || '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap">{v.animaisAlojados ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap">{v.animaisMortos ?? '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap">{v.volumeTotalCargas ?? '-'}</td>
                     <td className="px-5 py-4">
-                      <div className="text-xs leading-relaxed min-w-[300px]" title={v.recomendacao}>
+                      <div className="text-xs leading-relaxed min-w-[300px] whitespace-pre-wrap" title={v.recomendacao}>
                         {v.recomendacao ? (
                           <div className="space-y-1">
                             {v.recomendacao.split('\n').filter(l => l.trim()).map((line, i) => (
@@ -158,9 +159,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
                         ) : '-'}
                       </div>
                     </td>
-                    <td className="px-5 py-4 whitespace-nowrap">{v.volumeTotalCargas !== undefined && v.volumeTotalCargas !== null ? v.volumeTotalCargas : '-'}</td>
-                    <td className="px-5 py-4 whitespace-nowrap">{v.consumoAcumuladoReal !== undefined && v.consumoAcumuladoReal !== null ? v.consumoAcumuladoReal : '-'}</td>
-                    <td className="px-5 py-4 whitespace-nowrap">{v.animaisMortos !== undefined && v.animaisMortos !== null ? v.animaisMortos : '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap font-semibold">{v.consumoAcumuladoReal ?? '-'}</td>
                     <td className="px-5 py-4 whitespace-nowrap text-xs">{v.comedouro || '-'}</td>
                     <td className="px-5 py-4 whitespace-nowrap text-xs">{v.colaborador ? v.colaborador.replace(/\s*,\s*/g, ' / ') : '-'}</td>
                     
@@ -177,8 +176,6 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
                     <td className="px-5 py-4 whitespace-nowrap text-xs">{v.consumoTerminacao1 ?? '-'}</td>
                     <td className="px-5 py-4 whitespace-nowrap text-xs">{v.metaTerminacao2 ?? '-'}</td>
                     <td className="px-5 py-4 whitespace-nowrap text-xs">{v.consumoTerminacao2 ?? '-'}</td>
-                    
-                    <td className="px-5 py-4 whitespace-nowrap text-xs font-semibold">{v.consumoAcumuladoReal ?? '-'}</td>
                     <td className="px-5 py-4 whitespace-nowrap text-xs font-semibold">{v.metaAcumulada ?? '-'}</td>
                     
                     <td className="px-5 py-4 whitespace-nowrap text-xs">{v.pesoAloj ?? '-'}</td>

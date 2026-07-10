@@ -1,3 +1,5 @@
+import { registerSW } from 'virtual:pwa-register';
+if ('serviceWorker' in navigator) { registerSW({ immediate: true }); }
 // @ts-nocheck
 
 window.onerror = function(msg, url, lineNo, columnNo, error) {
@@ -18,9 +20,9 @@ window.onunhandledrejection = function(event) {
   }
 };
 const originalAddEventListener = window.addEventListener;
-window.addEventListener = function(type, listener, options) {
+window.addEventListener = function(type: any, listener: any, options?: any) {
   if (type === 'error' || type === 'unhandledrejection') {
-    const wrappedListener = function(event) {
+    const wrappedListener = function(this: any, event: any) {
       let err = event.error || event.reason;
       if (err && typeof err === 'object' && Object.keys(err).length === 0 && !(err instanceof Error)) {
         event.preventDefault();
@@ -29,9 +31,9 @@ window.addEventListener = function(type, listener, options) {
       }
       return typeof listener === 'function' ? listener.apply(this, arguments) : listener.handleEvent(event);
     };
-    return originalAddEventListener.call(this, type, wrappedListener, options);
+    return originalAddEventListener.call(window, type, wrappedListener, options);
   }
-  return originalAddEventListener.call(this, type, listener, options);
+  return originalAddEventListener.call(window, type, listener, options);
 };
 
 import {StrictMode, Component, ReactNode} from 'react';

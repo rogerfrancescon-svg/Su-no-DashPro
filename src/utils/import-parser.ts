@@ -17,286 +17,293 @@ export function preprocessImportData(rawData: string): PreProcessedData {
 
   if (lines.length === 0) return { integrados: [], visits, logs, errors };
 
-  // Detect delimiter based on the first few lines
+  // Detect delimiter
   let delimiter = '\t';
-  if (lines[0].includes('\t')) delimiter = '\t';
-  else if (lines[0].includes(';')) delimiter = ';';
-  else if (lines[0].includes(',')) delimiter = ',';
+  const sampleFirstLines = lines.slice(0, 10).join('\n');
+  if (sampleFirstLines.includes('\t')) delimiter = '\t';
+  else if (sampleFirstLines.includes(';')) delimiter = ';';
+  else if (sampleFirstLines.includes(',')) delimiter = ',';
 
-  // Parse all lines
+  // Parse lines
+  const parseLine = (text: string, delim: string) => {
+    let result = [];
+    let startValue = 0;
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '"') inQuotes = !inQuotes;
+      else if (text[i] === delim && !inQuotes) {
+        result.push(text.substring(startValue, i).replace(/^"|"$/g, '').trim());
+        startValue = i + 1;
+      }
+    }
+    result.push(text.substring(startValue).replace(/^"|"$/g, '').trim());
+    return result;
+  };
+
   const parsedLines = lines.map(line => {
-    return line.trim().split(delimiter).map(p => p.replace(/^"|"$/g, '').trim());
+    return parseLine(line.trim(), delimiter);
   }).filter(parts => parts.length > 0 && parts.some(p => p !== ''));
 
   if (parsedLines.length === 0) return { integrados: [], visits, logs, errors };
 
-  // Check if first line is a header
-  const firstLine = parsedLines[0].map(s => s.toLowerCase());
-  const isHeader = firstLine.some(h => h.includes('data') || h.includes('integrado') || h.includes('nome'));
-
-  // Default mapping for old format (without headers)
-  let columnMap: Record<string, number> = {
-    data: 0,
-    nome: 1,
-    lote: -1,
-    alojamento: 2,
-    idade: 3,
-    animaisAlojados: -1,
-    recomendacao: 4,
-    consumo: 5,
-    mortalidade: 6,
-    comedouro: 7,
-    colaborador: 8,
-    consumoMeta: 9,
-    pesoAloj: 10,
-    pontuacaoSanitaria: 11,
-    metaAlojamento: -1,
-    consumoAlojamento: -1,
-    metaCrescimento1: -1,
-    consumoCrescimento1: -1,
-    metaCrescimento2: -1,
-    consumoCrescimento2: -1,
-    metaCrescimento3: -1,
-    consumoCrescimento3: -1,
-    metaTerminacao1: -1,
-    consumoTerminacao1: -1,
-    metaTerminacao2: -1,
-    consumoTerminacao2: -1,
-    consumoAcumuladoReal: -1,
-    metaAcumulada: -1
-  };
-
-  let startIndex = 0;
-
-  if (isHeader) {
-    startIndex = 1;
-    // Map columns based on headers
-    for (let i = 0; i < firstLine.length; i++) {
-      const h = firstLine[i];
-      if (h.includes('data da visita') || h === 'data') columnMap.data = i;
-      else if (h.includes('integrado') || h.includes('nome')) columnMap.nome = i;
-      else if (h.includes('lote')) columnMap.lote = i;
-      else if (h.includes('alojamento') && !h.includes('meta') && !h.includes('consumo') && !h.includes('peso')) columnMap.alojamento = i;
-      else if (h.includes('idade')) columnMap.idade = i;
-      else if (h.includes('animais alojados')) columnMap.animaisAlojados = i;
-      else if (h.includes('recomenda')) columnMap.recomendacao = i;
-      else if ((h.includes('consumo') || h.includes('acumulado')) && !h.includes('meta') && !h.includes('real') && !h.includes('alojamento') && !h.includes('crescimento') && !h.includes('termina')) columnMap.consumo = i;
-      else if (h.includes('mortalidade') || h.includes('mort')) columnMap.mortalidade = i;
-      else if (h.includes('comedouro')) columnMap.comedouro = i;
-      else if (h.includes('colaborador') || h.includes('tecnico') || h.includes('téc') || h.includes('tcn')) columnMap.colaborador = i;
-      else if (h.includes('peso aloj')) columnMap.pesoAloj = i;
-      else if (h.includes('pontua') || h.includes('sanit') || h.includes('score')) columnMap.pontuacaoSanitaria = i;
-      else if (h.includes('meta alojamento')) columnMap.metaAlojamento = i;
-      else if (h.includes('consumo alojamento')) columnMap.consumoAlojamento = i;
-      else if (h.includes('meta crescimento 1')) columnMap.metaCrescimento1 = i;
-      else if (h.includes('consumo crescimento 1')) columnMap.consumoCrescimento1 = i;
-      else if (h.includes('meta crescimento 2')) columnMap.metaCrescimento2 = i;
-      else if (h.includes('consumo crescimento 2')) columnMap.consumoCrescimento2 = i;
-      else if (h.includes('meta crescimento 3')) columnMap.metaCrescimento3 = i;
-      else if (h.includes('consumo crescimento 3')) columnMap.consumoCrescimento3 = i;
-      else if (h.includes('meta termina') && h.includes('1')) columnMap.metaTerminacao1 = i;
-      else if (h.includes('consumo termina') && h.includes('1')) columnMap.consumoTerminacao1 = i;
-      else if (h.includes('meta termina') && h.includes('2')) columnMap.metaTerminacao2 = i;
-      else if (h.includes('consumo termina') && h.includes('2')) columnMap.consumoTerminacao2 = i;
-      else if (h.includes('consumo acumulado real')) columnMap.consumoAcumuladoReal = i;
-      else if (h.includes('meta acumulada')) columnMap.metaAcumulada = i;
+  // Find the header row dynamically (can be in the first 10 rows)
+  let headerRowIndex = 0;
+  let isHeader = false;
+  
+  for (let i = 0; i < Math.min(10, parsedLines.length); i++) {
+    const lineLower = parsedLines[i].map(s => s.toLowerCase());
+    if (lineLower.some(h => h.includes('data') || h.includes('integrado') || h.includes('nome'))) {
+      headerRowIndex = i;
+      isHeader = true;
+      break;
     }
-    logs.push(`Cabeçalho detectado. Mapeamento de colunas ajustado dinamicamente.`);
   }
 
-  let parsedCount = 0;
+  const headerLine = isHeader ? parsedLines[headerRowIndex].map(s => s.toLowerCase()) : parsedLines[0].map(s => s.toLowerCase());
+
+  // Map to find columns
+  const map: Record<string, number> = {};
   
+  if (isHeader) {
+    headerLine.forEach((h, i) => {
+      const cleanH = h.replace(/[^a-z0-9]/g, '');
+      if (cleanH === 'data' || cleanH === 'datavisita' || (cleanH.includes('data') && !cleanH.includes('alojamento'))) map.date = i;
+      if (cleanH.includes('integrado') || cleanH.includes('nome')) map.name = i;
+      if ((cleanH === 'alojamento' || cleanH === 'dataalojamento') || ((cleanH.includes('alojamento') || cleanH.includes('aloj')) && !cleanH.includes('meta') && !cleanH.includes('consumo') && !cleanH.includes('cons') && !cleanH.includes('peso') && !cleanH.includes('carga') && !cleanH.includes('animais'))) map.alojamento = i;
+      if (cleanH === 'idade' || cleanH === 'idadedolote') map.idade = i;
+      if (cleanH.includes('animaisalojados') || cleanH === 'alojados') map.animaisAlojados = i;
+      if (cleanH.includes('animaismortos') || cleanH === 'mortos') map.animaisMortos = i;
+      if (cleanH.includes('volcargas') || cleanH.includes('cargaenviada') || cleanH.includes('cargaskg')) map.volumeCargas = i;
+      if (cleanH.includes('recomendao') || cleanH.includes('recomendacao')) map.recomendacao = i;
+      if (cleanH.includes('consumoacumulado') || cleanH.includes('consumoacumuladoreal') || (cleanH.includes('consumo') && !cleanH.includes('aloj') && !cleanH.includes('cresc') && !cleanH.includes('term'))) map.consumoAcumuladoReal = i;
+      if (cleanH === 'mortalidade' || cleanH === 'mort' || cleanH === 'mortalidade') map.mortalidade = i;
+      if (cleanH.includes('comedouro')) map.comedouro = i;
+      if (cleanH.includes('colaborador') || cleanH.includes('tecnico')) map.colaborador = i;
+      
+      if (cleanH.includes('metaalojamento') || cleanH.includes('metaaloj')) map.metaAlojamento = i;
+      if (cleanH.includes('consumoalojamento') || cleanH.includes('consaloj')) map.consumoAlojamento = i;
+      if (cleanH.includes('metacrescimento1') || cleanH.includes('metacresc1')) map.metaCrescimento1 = i;
+      if (cleanH.includes('consumocrescimento1') || cleanH.includes('conscresc1')) map.consumoCrescimento1 = i;
+      if (cleanH.includes('metacrescimento2') || cleanH.includes('metacresc2')) map.metaCrescimento2 = i;
+      if (cleanH.includes('consumocrescimento2') || cleanH.includes('conscresc2')) map.consumoCrescimento2 = i;
+      if (cleanH.includes('metacrescimento3') || cleanH.includes('metacresc3')) map.metaCrescimento3 = i;
+      if (cleanH.includes('consumocrescimento3') || cleanH.includes('conscresc3')) map.consumoCrescimento3 = i;
+      if (cleanH.includes('metaterminacao1') || cleanH.includes('metaterminao1') || cleanH.includes('metaterm1')) map.metaTerminacao1 = i;
+      if (cleanH.includes('consumoterminacao1') || cleanH.includes('consumoterminao1') || cleanH.includes('consterm1')) map.consumoTerminacao1 = i;
+      if (cleanH.includes('metaterminacao2') || cleanH.includes('metaterminao2') || cleanH.includes('metaterm2')) map.metaTerminacao2 = i;
+      if (cleanH.includes('consumoterminacao2') || cleanH.includes('consumoterminao2') || cleanH.includes('consterm2')) map.consumoTerminacao2 = i;
+      
+      if (cleanH.includes('metaacumulada') || cleanH.includes('metaacum')) map.metaAcumulada = i;
+      if (cleanH.includes('pesoaloj')) map.pesoAloj = i;
+      if (cleanH.includes('pontuaosanitaria') || cleanH.includes('pontuacaosanitaria')) map.pontuacaoSanitaria = i;
+    });
+    
+    logs.push(`Cabeçalho detectado e mapeado automaticamente (${Object.keys(map).length} colunas identificadas).`);
+
+    // Validação de esquema rigorosa
+        const requiredFields = [
+      { key: 'date', label: 'Data' },
+      { key: 'name', label: 'Integrado' },
+      { key: 'alojamento', label: 'Alojamento' }
+    ];
+
+    const missingFields = requiredFields.filter(f => map[f.key] === undefined);
+    if (missingFields.length > 0) {
+      const missingLabels = missingFields.map(m => m.label).join(', ');
+      const foundCols = Object.keys(map).join(', ');
+      errors.push(`Erro de Validação: O esquema da planilha não corresponde exatamente ao formato esperado. Faltam as seguintes colunas: ${missingLabels}. Colunas mapeadas: ${foundCols || 'Nenhuma'}. Certifique-se que o cabeçalho contenha Data, Integrado e Alojamento.`);
+      return { integrados: [], visits: [], logs, errors };
+    }
+
+  } else {
+    // Fallback: fixed layout for old imports
+    map.date = 0; map.name = 1; map.alojamento = 2; map.idade = 3; map.recomendacao = 4; map.consumoAcumuladoReal = 5; map.mortalidade = 6; map.comedouro = 7; map.colaborador = 8; map.pesoAloj = 10; map.pontuacaoSanitaria = 11;
+  }
+
+  let startIndex = isHeader ? headerRowIndex + 1 : 0;
+  let parsedCount = 0;
+
   const parseFloatSafe = (valStr: string | undefined): number | undefined => {
-      const clean = (valStr || '').trim();
-      if (!clean) return undefined;
-      let val = 0;
-      if (clean.includes(',')) {
-          val = parseFloat(clean.replace(/\./g, '').replace(',', '.'));
+    let clean = (valStr || '').trim();
+    if (!clean || clean === '-' || clean === '') return undefined;
+    
+    // Remove " kg" or other units if present
+    clean = clean.replace(/[^\d.,-]/g, '');
+
+    if (clean.includes(',') && clean.includes('.')) {
+      // 1.234,56 -> 1234.56
+      const lastComma = clean.lastIndexOf(',');
+      const lastDot = clean.lastIndexOf('.');
+      if (lastComma > lastDot) {
+        clean = clean.replace(/\./g, '').replace(',', '.');
       } else {
-          val = parseFloat(clean);
+        clean = clean.replace(/,/g, '');
       }
-      return isNaN(val) ? undefined : val;
+    } else if (clean.includes(',')) {
+      // 123,45 -> 123.45
+      clean = clean.replace(',', '.');
+    } else if (clean.includes('.')) {
+      // 10.000 -> 10000
+      if (/^\d{1,3}(\.\d{3})+$/.test(clean)) {
+         clean = clean.replace(/\./g, '');
+      }
+    }
+
+    const val = parseFloat(clean);
+    return isNaN(val) ? undefined : val;
+  };
+
+  const formatDate = (dStr: string) => {
+    if (!dStr) return '';
+    
+    // Check if it's an Excel serial date (only numbers)
+    if (/^\d{4,5}(\.\d+)?$/.test(dStr.trim())) {
+      const serial = parseFloat(dStr.trim());
+      // Excel epoch is 1899-12-30 (due to 1900 leap year bug)
+      const date = new Date(Math.round((serial - 25569) * 86400 * 1000));
+      // JS uses UTC for these manual constructions to avoid timezone shifts
+      const iso = new Date(date.getTime() + Math.abs(date.getTimezoneOffset() * 60000)).toISOString();
+      return iso.split('T')[0];
+    }
+
+    // Trim and take only the first part before space/T in case of ISO or timestamp
+    dStr = dStr.trim().split(/[ T]/)[0];
+    if (!dStr) return '';
+    let parts: string[] = [];
+    if (dStr.includes('-')) parts = dStr.split('-');
+    else if (dStr.includes('/')) parts = dStr.split('/');
+    
+    if (parts.length !== 3) return dStr;
+    
+    let year = parts[2];
+    if (year.length === 2) year = '20' + year;
+    if (year.length !== 4 && parts[0].length === 4) year = parts[0];
+    
+    if (parts[0].length === 4) { // YYYY-MM-DD
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    } else { // DD-MM-YYYY
+      return `${year}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
   };
 
   for (let i = startIndex; i < parsedLines.length; i++) {
-    const parts = parsedLines[i];
+    try {
+      const parts = parsedLines[i];
     const originalLineIndex = i + 1;
+
+    const getCol = (key: string) => map[key] !== undefined ? parts[map[key]] : undefined;
+
+    let dateStr = getCol('date');
+    let name = getCol('name');
+    let alojamentoStr = getCol('alojamento');
     
-    let dateStr, name, loteStr, alojamentoStr, idadeStr, rec, consumoStr, mortStr, comedouro, colab, pesoAlojStr, pontuacaoSanitariaStr;
-
-    // Try array access first
-    if (parts.length >= 3) {
-      dateStr = parts[columnMap.data];
-      name = parts[columnMap.nome];
-      loteStr = columnMap.lote >= 0 ? parts[columnMap.lote] : '';
-      alojamentoStr = parts[columnMap.alojamento];
-      idadeStr = parts[columnMap.idade];
-      rec = parts[columnMap.recomendacao];
-      consumoStr = parts[columnMap.consumo];
-      mortStr = parts[columnMap.mortalidade];
-      comedouro = parts[columnMap.comedouro];
-      colab = parts[columnMap.colaborador];
-      pesoAlojStr = parts[columnMap.pesoAloj];
-      pontuacaoSanitariaStr = parts[columnMap.pontuacaoSanitaria];
-    } else {
-      // Fallback regex for unstructured spaces if standard delimiter splitting failed to yield enough columns
-      const rawLine = lines[i].trim();
-      const match = rawLine.match(/^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(\d{2}\/\d{2}\/\d{4})\s+(-?\d+)\s+(.+?)\s+([\d.,]+)\s+(\d+)\s+(Automático|Linear|Misto|Multitratos|Basculante|Robô|automático com\s+água|AUSTER)\s+([^\d\t\n]+)\s*(.*)$/i);
-      if (match) {
-        [, dateStr, name, alojamentoStr, idadeStr, rec, consumoStr, mortStr, comedouro, colab] = match;
-      }
-    }
-
     if (!dateStr || !name || !alojamentoStr) {
-      logs.push(`Aviso: Linha ${originalLineIndex} não possui os campos obrigatórios (Data, Nome, Alojamento) e será ignorada.`);
+      errors.push(`Erro na linha ${originalLineIndex}: Falta campos obrigatórios. Data="${dateStr || ''}", Nome="${name || ''}", Alojamento="${alojamentoStr || ''}"`);
       continue;
     }
-
-    // Normalization and Validation Helpers
-    const formatDate = (dStr: string) => {
-      if (!dStr) return '';
-      if (dStr.includes('-')) {
-        const p = dStr.split('-');
-        if (p.length !== 3) return dStr;
-        let year = p[2];
-        if (year.length === 2) year = '20' + year;
-        return p[0].length === 4 ? dStr : `${year}-${p[1]}-${p[0]}`;
-      }
-      if (dStr.includes('/')) {
-        const p = dStr.split('/');
-        if (p.length !== 3) return dStr;
-        let year = p[2];
-        if (year.length === 2) year = '20' + year;
-        return p[0].length === 4 ? dStr.replace(/\//g, '-') : `${year}-${p[1]}-${p[0]}`;
-      }
-      return dStr;
-    };
 
     const finalDateStr = formatDate(dateStr);
     const finalAlojamentoStr = formatDate(alojamentoStr);
-    
-    const parsedDate = new Date(finalDateStr);
-    const parsedAlojamento = new Date(finalAlojamentoStr);
-    
-    if (isNaN(parsedDate.getTime())) {
+
+    // Validate dates
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(finalDateStr)) {
       errors.push(`Erro na linha ${originalLineIndex}: Data da visita inválida (${dateStr})`);
       continue;
     }
-    
-    if (isNaN(parsedAlojamento.getTime())) {
+    if (!dateRegex.test(finalAlojamentoStr)) {
       errors.push(`Erro na linha ${originalLineIndex}: Data de alojamento inválida (${alojamentoStr})`);
       continue;
     }
 
-    // Calculate age correctly
+    // Calcular idade
+    const pDate = new Date(finalDateStr + 'T12:00:00');
+    const pAloj = new Date(finalAlojamentoStr + 'T12:00:00');
+    let idadeStr = getCol('idade');
     let calculatedIdade = parseInt(idadeStr || '0', 10) || 0;
-    const diffTime = parsedDate.getTime() - parsedAlojamento.getTime();
-    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
     
-    if (diffDays >= -10 && diffDays <= 200) { 
+    if (!calculatedIdade) {
+      const diffTime = pDate.getTime() - pAloj.getTime();
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays >= -10 && diffDays <= 200) {
         calculatedIdade = diffDays;
+      }
     }
 
-    // Consider closed if age > 120 days
     const isClosed = calculatedIdade > 120;
-
-    // Fix names and IDs
     name = name.trim();
-    if (!name) {
-      errors.push(`Erro na linha ${originalLineIndex}: Nome do integrado não encontrado.`);
-      continue;
-    }
-    
-    const alojamentoStrClean = (finalAlojamentoStr || '').replace(/[-/]/g, '');
-    const id = `i_${name.replace(/\s+/g, '').toLowerCase()}_${alojamentoStrClean}`;
 
+    const alojamentoStrClean = finalAlojamentoStr.replace(/[-/]/g, '');
+    const id = `i_${name.replace(/\s+/g, '').toLowerCase()}_${alojamentoStrClean}`;
+    
     if (!integradosMap.has(id)) {
       integradosMap.set(id, {
         id,
         name,
-        loteNumber: (loteStr || '').trim() || undefined,
         alojamentoDate: finalAlojamentoStr,
         status: isClosed ? 'Fechado' : 'Em andamento'
       });
     } else if (isClosed) {
       const existing = integradosMap.get(id);
-      if (existing) {
-        existing.status = 'Fechado';
-      }
+      if (existing) existing.status = 'Fechado';
     }
 
+    let comedouro = getCol('comedouro');
     let parsedComedouro = 'Automático';
     const cLow = (comedouro || '').toLowerCase();
     if (cLow.includes('linear')) parsedComedouro = 'Linear';
     if (cLow.includes('misto')) parsedComedouro = 'Misto';
 
+    let consumoStr = getCol('consumoAcumuladoReal');
     let consumo = parseFloatSafe(consumoStr) || 0;
     if (consumo < 0) consumo = 0;
-    
-    // Normalization for mortality (often imported with dots like 1.000 instead of 1000 or trailing spaces)
-    let mortStrClean = (mortStr || '0').trim().replace(/\./g, '');
-    let mort = parseInt(mortStrClean, 10);
-    if (isNaN(mort) || mort < 0) mort = 0;
 
-    if (consumo === 0 && rec) {
-      const recMatch = rec.match(/consumo.*?(?:de\s+)?([\d.,]+)\s*kg/i);
-      if (recMatch) {
-        let matchStr = recMatch[1];
-        consumo = parseFloatSafe(matchStr) || 0;
-      }
-    }
-    
-    // Sometimes mortality is inside the recommendation string or missed
-    if (mort === 0 && rec) {
-      const mortMatch = rec.match(/mortalidade.*?(?:de\s+)?(\d+)/i);
-      if (mortMatch) {
-        mort = parseInt(mortMatch[1], 10);
-      }
-    }
-    
-    const getVal = (colIdx: number) => colIdx >= 0 ? parseFloatSafe(parts[colIdx]) : undefined;
+    let mortStr = getCol('mortalidade');
+    let mort = parseFloatSafe(mortStr) || 0;
+    if (mort < 0) mort = 0;
+
+    let rec = getCol('recomendacao');
 
     visits.push({
       id: `v_${id}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${parsedCount}`,
       integradoId: id,
       date: finalDateStr,
       idade: calculatedIdade,
-      animaisAlojados: getVal(columnMap.animaisAlojados),
       recomendacao: (rec || '').trim(),
-      consumoAcumuladoReal: consumo, // Keep as legacy 
+      consumoAcumuladoReal: consumo,
       mortalidade: mort,
       comedouro: parsedComedouro as 'Automático' | 'Linear' | 'Misto',
-      colaborador: (colab || '').trim(),
-      pesoAloj: parseFloatSafe(pesoAlojStr),
-      pontuacaoSanitaria: parseInt((pontuacaoSanitariaStr || '').trim(), 10) || undefined,
-      metaAlojamento: getVal(columnMap.metaAlojamento) ?? defaultMetas.metaAlojamento,
-      consumoAlojamento: getVal(columnMap.consumoAlojamento),
-      metaCrescimento1: getVal(columnMap.metaCrescimento1) ?? defaultMetas.metaCrescimento1,
-      consumoCrescimento1: getVal(columnMap.consumoCrescimento1),
-      metaCrescimento2: getVal(columnMap.metaCrescimento2) ?? defaultMetas.metaCrescimento2,
-      consumoCrescimento2: getVal(columnMap.consumoCrescimento2),
-      metaCrescimento3: getVal(columnMap.metaCrescimento3) ?? defaultMetas.metaCrescimento3,
-      consumoCrescimento3: getVal(columnMap.consumoCrescimento3),
-      metaTerminacao1: getVal(columnMap.metaTerminacao1) ?? defaultMetas.metaTerminacao1,
-      consumoTerminacao1: getVal(columnMap.consumoTerminacao1),
-      metaTerminacao2: getVal(columnMap.metaTerminacao2) ?? defaultMetas.metaTerminacao2,
-      consumoTerminacao2: getVal(columnMap.consumoTerminacao2),
-      metaAcumulada: getVal(columnMap.metaAcumulada) ?? defaultMetas.metaAcumulada,
+      colaborador: (getCol('colaborador') || '').trim(),
+      pesoAloj: parseFloatSafe(getCol('pesoAloj')),
+      pontuacaoSanitaria: parseInt((getCol('pontuacaoSanitaria') || '').trim(), 10) || undefined,
+      
+      animaisAlojados: parseFloatSafe(getCol('animaisAlojados')),
+      animaisMortos: parseFloatSafe(getCol('animaisMortos')) ?? mort,
+      volumeTotalCargas: parseFloatSafe(getCol('volumeCargas')),
+
+      metaAlojamento: parseFloatSafe(getCol('metaAlojamento')) ?? defaultMetas.metaAlojamento,
+      consumoAlojamento: parseFloatSafe(getCol('consumoAlojamento')),
+      metaCrescimento1: parseFloatSafe(getCol('metaCrescimento1')) ?? defaultMetas.metaCrescimento1,
+      consumoCrescimento1: parseFloatSafe(getCol('consumoCrescimento1')),
+      metaCrescimento2: parseFloatSafe(getCol('metaCrescimento2')) ?? defaultMetas.metaCrescimento2,
+      consumoCrescimento2: parseFloatSafe(getCol('consumoCrescimento2')),
+      metaCrescimento3: parseFloatSafe(getCol('metaCrescimento3')) ?? defaultMetas.metaCrescimento3,
+      consumoCrescimento3: parseFloatSafe(getCol('consumoCrescimento3')),
+      metaTerminacao1: parseFloatSafe(getCol('metaTerminacao1')) ?? defaultMetas.metaTerminacao1,
+      consumoTerminacao1: parseFloatSafe(getCol('consumoTerminacao1')),
+      metaTerminacao2: parseFloatSafe(getCol('metaTerminacao2')) ?? defaultMetas.metaTerminacao2,
+      consumoTerminacao2: parseFloatSafe(getCol('consumoTerminacao2')),
+      metaAcumulada: parseFloatSafe(getCol('metaAcumulada')) ?? defaultMetas.metaAcumulada
     });
-    
-    // Special handling if real was parsed in a separate column
-    if (columnMap.consumoAcumuladoReal >= 0) {
-        const parsedReal = getVal(columnMap.consumoAcumuladoReal);
-        if (parsedReal !== undefined) {
-             visits[visits.length - 1].consumoAcumuladoReal = parsedReal;
-        }
+
+      parsedCount++;
+    } catch (e: any) {
+      errors.push(`Erro inesperado na linha ${i + 1}: ${e.message}`);
     }
-    
-    parsedCount++;
   }
 
   logs.push(`Pré-processamento concluído: ${parsedCount} registros válidos.`);
-  
+
   return {
     integrados: Array.from(integradosMap.values()),
     visits,

@@ -4,6 +4,7 @@ import { defaultMetas } from '../data';
 
 const INTEGRADOS_KEY = 'suino_dashpro_integrados';
 const VISITS_KEY = 'suino_dashpro_visits';
+const OFFLINE_QUEUE_KEY = 'suino_dashpro_offline_queue';
 
 const getIntegradosLocal = (): Integrado[] => {
   try {
@@ -43,6 +44,21 @@ export const storage = {
       if (!session || session.user.id === 'offline') {
         console.warn('Cannot sync from Supabase: No active session');
         return false;
+      }
+      
+      // Process offline queue before fetching
+      try {
+        const queueStr = localStorage.getItem(OFFLINE_QUEUE_KEY);
+        if (queueStr) {
+          const queue = JSON.parse(queueStr);
+          if (queue && queue.length > 0) {
+            console.log('Pushing offline queue to Supabase before sync:', queue.length, 'records');
+            await storage.saveVisits(getVisitsLocal(), queue);
+            localStorage.removeItem(OFFLINE_QUEUE_KEY);
+          }
+        }
+      } catch (e) {
+        console.error('Error processing offline queue:', e);
       }
 
       let allData: any[] = [];
@@ -84,11 +100,47 @@ export const storage = {
       const integradosMap = new Map<string, Integrado>();
       const visits: Visit[] = [];
 
+      if (allData.length > 0) {
+        console.log('--- SUPABASE FIRST ROW DATA ---', allData[0]);
+        console.log('--- SUPABASE FIRST ROW KEYS ---', Object.keys(allData[0]));
+      }
+
+      const getCol = (row: any, colName: string) => {
+        if (row[colName] !== undefined) return row[colName];
+        const lowerColName = colName.toLowerCase();
+        for (const key of Object.keys(row)) {
+          if (key.toLowerCase() === lowerColName) return row[key];
+        }
+        return undefined;
+      };
+
+      const parseFloatSafe = (valStr: any): number | undefined => {
+        if (valStr === null || valStr === undefined) return undefined;
+        let clean = String(valStr).trim();
+        if (!clean || clean === '-' || clean === '') return undefined;
+        
+        clean = clean.replace(/[^\d.,-]/g, '');
+        if (clean.includes(',') && clean.includes('.')) {
+          const lastComma = clean.lastIndexOf(',');
+          const lastDot = clean.lastIndexOf('.');
+          if (lastComma > lastDot) {
+            clean = clean.replace(/\./g, '').replace(',', '.');
+          } else {
+            clean = clean.replace(/,/g, '');
+          }
+        } else if (clean.includes(',')) {
+          clean = clean.replace(',', '.');
+        }
+        
+        const num = parseFloat(clean);
+        return isNaN(num) ? undefined : num;
+      };
+
       for (const row of allData) {
-        const integradoNome = row['Integrado'];
+        const integradoNome = getCol(row, 'Integrado');
         if (!integradoNome) continue;
         
-        const alojamentoData = formatDate(row['Alojamento'] || '');
+        const alojamentoData = formatDate(getCol(row, 'Alojamento') || '');
         const integradoId = `i_${integradoNome.replace(/\s+/g, '').toLowerCase()}_${alojamentoData.replace(/[-/]/g, '')}`;
         
         if (!integradosMap.has(integradoId)) {
@@ -100,36 +152,37 @@ export const storage = {
           });
         }
         
-        const dataVisita = formatDate(row['Data'] || '');
+        const dataVisita = formatDate(getCol(row, 'Data') || '');
         if (dataVisita) {
           visits.push({
-            id: row.id,
+            id: getCol(row, 'id'),
             integradoId: integradoId,
             date: dataVisita,
-            idade: Number(row['Idade']) || 0,
-            animaisAlojados: row['Animais Alojados'] !== null && row['Animais Alojados'] !== undefined ? Number(row['Animais Alojados']) : undefined,
-            animaisMortos: row['Animais Mortos'] !== null && row['Animais Mortos'] !== undefined ? Number(row['Animais Mortos']) : undefined,
-            volumeTotalCargas: row['Vol. Cargas (kg)'] !== null && row['Vol. Cargas (kg)'] !== undefined ? Number(row['Vol. Cargas (kg)']) : undefined,
-            recomendacao: row['Recomendação'] || '',
-            consumoAcumuladoReal: row['Consumo Acumulado Real'] ?? row['Consumo acumulado'] ?? undefined,
-            mortalidade: row['Mortalidade'] ?? undefined,
-            comedouro: (row['Comedouro'] as any) || 'Automático',
-            colaborador: row['Colaborador'] || '',
-            pesoAloj: row['Peso aloj'] !== null && row['Peso aloj'] !== undefined ? Number(row['Peso aloj']) : undefined,
-            pontuacaoSanitaria: row['Pontuação Sanitária'] !== null && row['Pontuação Sanitária'] !== undefined ? Number(row['Pontuação Sanitária']) : undefined,
-            metaAlojamento: row['Meta Alojamento'] !== null && row['Meta Alojamento'] !== undefined ? Number(row['Meta Alojamento']) : defaultMetas.metaAlojamento,
-            consumoAlojamento: row['Consumo Alojamento'] !== null && row['Consumo Alojamento'] !== undefined ? Number(row['Consumo Alojamento']) : undefined,
-            metaCrescimento1: row['Meta Crescimento 1'] !== null && row['Meta Crescimento 1'] !== undefined ? Number(row['Meta Crescimento 1']) : defaultMetas.metaCrescimento1,
-            consumoCrescimento1: row['Consumo Crescimento 1'] !== null && row['Consumo Crescimento 1'] !== undefined ? Number(row['Consumo Crescimento 1']) : undefined,
-            metaCrescimento2: row['Meta Crescimento 2'] !== null && row['Meta Crescimento 2'] !== undefined ? Number(row['Meta Crescimento 2']) : defaultMetas.metaCrescimento2,
-            consumoCrescimento2: row['Consumo Crescimento 2'] !== null && row['Consumo Crescimento 2'] !== undefined ? Number(row['Consumo Crescimento 2']) : undefined,
-            metaCrescimento3: row['Meta Crescimento 3'] !== null && row['Meta Crescimento 3'] !== undefined ? Number(row['Meta Crescimento 3']) : defaultMetas.metaCrescimento3,
-            consumoCrescimento3: row['Consumo Crescimento 3'] !== null && row['Consumo Crescimento 3'] !== undefined ? Number(row['Consumo Crescimento 3']) : undefined,
-            metaTerminacao1: row['Meta Terminação 1'] !== null && row['Meta Terminação 1'] !== undefined ? Number(row['Meta Terminação 1']) : defaultMetas.metaTerminacao1,
-            consumoTerminacao1: row['Consumo Terminação 1'] !== null && row['Consumo Terminação 1'] !== undefined ? Number(row['Consumo Terminação 1']) : undefined,
-            metaTerminacao2: row['Meta Terminação 2'] !== null && row['Meta Terminação 2'] !== undefined ? Number(row['Meta Terminação 2']) : defaultMetas.metaTerminacao2,
-            consumoTerminacao2: row['Consumo Terminação 2'] !== null && row['Consumo Terminação 2'] !== undefined ? Number(row['Consumo Terminação 2']) : undefined,
-            metaAcumulada: row['Meta Acumulada'] !== null && row['Meta Acumulada'] !== undefined ? Number(row['Meta Acumulada']) : defaultMetas.metaAcumulada,
+            idade: parseFloatSafe(getCol(row, 'Idade')) || 0,
+            animaisAlojados: parseFloatSafe(getCol(row, 'Animais Alojados')),
+            animaisMortos: parseFloatSafe(getCol(row, 'Animais Mortos')),
+            mortalidade: parseFloatSafe(getCol(row, 'Mortalidade')),
+            volumeTotalCargas: parseFloatSafe(getCol(row, 'Vol. Cargas (kg)')),
+            recomendacao: getCol(row, 'Recomendação') || '',
+            consumoAcumuladoReal: parseFloatSafe(getCol(row, 'Consumo Acumulado Real') ?? getCol(row, 'Consumo acumulado')),
+
+            comedouro: (getCol(row, 'Comedouro') as any) || 'Automático',
+            colaborador: getCol(row, 'Colaborador') || '',
+            pesoAloj: parseFloatSafe(getCol(row, 'Peso aloj')),
+            pontuacaoSanitaria: parseFloatSafe(getCol(row, 'Pontuação Sanitária')),
+            metaAlojamento: parseFloatSafe(getCol(row, 'Meta Aloj')) ?? defaultMetas.metaAlojamento,
+            consumoAlojamento: parseFloatSafe(getCol(row, 'Cons. Aloj')),
+            metaCrescimento1: parseFloatSafe(getCol(row, 'Meta Cresc 1')) ?? defaultMetas.metaCrescimento1,
+            consumoCrescimento1: parseFloatSafe(getCol(row, 'Cons. Cresc 1')),
+            metaCrescimento2: parseFloatSafe(getCol(row, 'Meta Cresc 2')) ?? defaultMetas.metaCrescimento2,
+            consumoCrescimento2: parseFloatSafe(getCol(row, 'Cons. Cresc 2')),
+            metaCrescimento3: parseFloatSafe(getCol(row, 'Meta Cresc 3')) ?? defaultMetas.metaCrescimento3,
+            consumoCrescimento3: parseFloatSafe(getCol(row, 'Cons. Cresc 3')),
+            metaTerminacao1: parseFloatSafe(getCol(row, 'Meta Term 1')) ?? defaultMetas.metaTerminacao1,
+            consumoTerminacao1: parseFloatSafe(getCol(row, 'Cons. Term 1')),
+            metaTerminacao2: parseFloatSafe(getCol(row, 'Meta Term 2')) ?? defaultMetas.metaTerminacao2,
+            consumoTerminacao2: parseFloatSafe(getCol(row, 'Cons. Term 2')),
+            metaAcumulada: parseFloatSafe(getCol(row, 'Meta Acum.')) ?? defaultMetas.metaAcumulada,
           });
         }
       }
@@ -177,35 +230,34 @@ export const storage = {
     
     for (const v of toProcess) {
       const integrado = integrados.find(i => i.id === v.integradoId);
+      const toNum = (val: any) => (val === '' || val === null || val === undefined || isNaN(Number(val))) ? null : Number(val);
       const row: any = {
         'Data': v.date,
         'Integrado': integrado?.name || 'Desconhecido',
         'Alojamento': integrado?.alojamentoDate || '',
-        'Idade': v.idade,
-        'Animais Alojados': v.animaisAlojados ?? null,
-        'Animais Mortos': v.animaisMortos ?? null,
-        'Vol. Cargas (kg)': v.volumeTotalCargas ?? null,
+        'Idade': toNum(v.idade) || 0,
+        'Animais Alojados': toNum(v.animaisAlojados),
+        'Animais Mortos': toNum(v.animaisMortos),
+        'Vol. Cargas (kg)': toNum(v.volumeTotalCargas),
         'Recomendação': v.recomendacao || '',
-        'Consumo acumulado': v.consumoAcumuladoReal ?? null,
-        'Mortalidade': v.mortalidade ?? null,
+        'Consumo acumulado': toNum(v.consumoAcumuladoReal),
         'Comedouro': v.comedouro || '',
         'Colaborador': v.colaborador || '',
-        'Meta Alojamento': v.metaAlojamento || null,
-        'Consumo Alojamento': v.consumoAlojamento || null,
-        'Meta Crescimento 1': v.metaCrescimento1 || null,
-        'Consumo Crescimento 1': v.consumoCrescimento1 || null,
-        'Meta Crescimento 2': v.metaCrescimento2 || null,
-        'Consumo Crescimento 2': v.consumoCrescimento2 || null,
-        'Meta Crescimento 3': v.metaCrescimento3 || null,
-        'Consumo Crescimento 3': v.consumoCrescimento3 || null,
-        'Meta Terminação 1': v.metaTerminacao1 || null,
-        'Consumo Terminação 1': v.consumoTerminacao1 || null,
-        'Meta Terminação 2': v.metaTerminacao2 || null,
-        'Consumo Terminação 2': v.consumoTerminacao2 || null,
-        'Consumo Acumulado Real': v.consumoAcumuladoReal ?? null,
-        'Meta Acumulada': v.metaAcumulada ?? null,
-        'Peso aloj': v.pesoAloj ?? null,
-        'Pontuação Sanitária': v.pontuacaoSanitaria ?? null,
+        'Meta Aloj': toNum(v.metaAlojamento),
+        'Cons. Aloj': toNum(v.consumoAlojamento),
+        'Meta Cresc 1': toNum(v.metaCrescimento1),
+        'Cons. Cresc 1': toNum(v.consumoCrescimento1),
+        'Meta Cresc 2': toNum(v.metaCrescimento2),
+        'Cons. Cresc 2': toNum(v.consumoCrescimento2),
+        'Meta Cresc 3': toNum(v.metaCrescimento3),
+        'Cons. Cresc 3': toNum(v.consumoCrescimento3),
+        'Meta Term 1': toNum(v.metaTerminacao1),
+        'Cons. Term 1': toNum(v.consumoTerminacao1),
+        'Meta Term 2': toNum(v.metaTerminacao2),
+        'Cons. Term 2': toNum(v.consumoTerminacao2),
+        'Meta Acum.': toNum(v.metaAcumulada),
+        'Peso aloj': toNum(v.pesoAloj),
+        'Pontuação Sanitária': toNum(v.pontuacaoSanitaria),
       };
       
       if (userId) {
@@ -224,6 +276,26 @@ export const storage = {
     try {
       if (!session || session.user?.id === 'offline') {
         console.warn('Offline mode: skipping saveVisits to Supabase');
+        
+        // Add to offline queue
+        try {
+          const queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]');
+          
+          // Add newly modified visits to queue
+          for (const v of toProcess) {
+            const existingIdx = queue.findIndex((q: any) => q.id === v.id);
+            if (existingIdx >= 0) {
+              queue[existingIdx] = v;
+            } else {
+              queue.push(v);
+            }
+          }
+          
+          localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+          console.log('Added ' + toProcess.length + ' visits to offline queue');
+        } catch (e) {
+          console.error('Failed to add to offline queue', e);
+        }
       } else {
         if (toUpdate.length > 0) {
           for (let i = 0; i < toUpdate.length; i += 500) {
@@ -255,13 +327,14 @@ export const storage = {
           }
         }
       }
+      
+      // Save updated visits to local storage only if DB push was successful (or offline)
+      localStorage.setItem(VISITS_KEY, JSON.stringify(visits));
     } catch (e: any) {
       console.warn('saveVisits failed:', e);
-      // Do not throw to avoid unhandled rejections
+      throw e; // Propagate the error to the UI
     }
     
-    // Save updated visits to local storage
-    localStorage.setItem(VISITS_KEY, JSON.stringify(visits));
     return visits;
   },
 
@@ -284,15 +357,19 @@ export const storage = {
         if (visitIds && visitIds.length > 0) {
           for (let i = 0; i < visitIds.length; i += 500) {
             const chunk = visitIds.slice(i, i + 500);
-            await supabase.from('registros').delete().in('id', chunk);
+            const { error } = await supabase.from('registros').delete().in('id', chunk);
+            if (error) throw error;
           }
         }
         // Always delete by Integrado name as a fallback to catch any orphaned records
-        await supabase.from('registros')
+        const { error: err2 } = await supabase.from('registros')
           .delete()
           .eq('Integrado', toDelete.name);
+        if (err2) throw err2;
       }
-    } catch (e) {}
+    } catch (e: any) {
+      throw e;
+    }
   },
 
   deleteVisit: async (id: string) => {
@@ -303,9 +380,12 @@ export const storage = {
       if (!session || session.user?.id === 'offline') {
         console.warn('Offline mode: skipping deleteVisit from Supabase');
       } else {
-        await supabase.from('registros').delete().eq('id', id);
+        const { error } = await supabase.from('registros').delete().eq('id', id);
+        if (error) throw error;
       }
-    } catch (e) {}
+    } catch (e: any) {
+      throw e;
+    }
   },
 
   clearAll: async () => {
@@ -316,8 +396,95 @@ export const storage = {
       if (!session || session.user?.id === 'offline') {
         console.warn('Offline mode: skipping clearAll from Supabase');
       } else {
-        await supabase.from('registros').delete().neq('id', '0');
+        const { error } = await supabase.from('registros').delete().not('id', 'is', null);
+        if (error) throw error;
       }
-    } catch (e) {}
+    } catch (e: any) {
+      throw e;
+    }
+  },
+  
+  verifyDataConsistency: async () => {
+    console.log('--- INICIANDO VERIFICAÇÃO DE CONSISTÊNCIA ---');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || session.user?.id === 'offline') {
+        console.warn('Usuário offline, impossível verificar com o Supabase.');
+        return;
+      }
+
+      // 1. Fetch all Supabase records
+      console.log('1. Buscando registros no Supabase...');
+      let supabaseData: any[] = [];
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('registros')
+          .select('*')
+          .range(page * 1000, (page + 1) * 1000 - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          supabaseData = supabaseData.concat(data);
+          page++;
+        } else {
+          hasMore = false;
+        }
+      }
+      console.log('-> Encontrados ' + supabaseData.length + ' registros no Supabase.');
+
+      // 2. Get local records
+      console.log('2. Buscando registros locais...');
+      const localVisits = getVisitsLocal();
+      const localIntegrados = getIntegradosLocal();
+      console.log('-> Encontrados ' + localVisits.length + ' registros locais.');
+
+      // 3. Compare data
+      const supabaseIds = new Set(supabaseData.map(r => r.id));
+      const localIds = new Set(localVisits.map(v => v.id));
+
+      const missingInSupabase = localVisits.filter(v => !supabaseIds.has(v.id));
+      const missingInLocal = supabaseData.filter(r => !localIds.has(r.id));
+
+      console.log('--- RESULTADOS DA COMPARAÇÃO ---');
+      if (missingInSupabase.length === 0 && missingInLocal.length === 0) {
+        console.log('✅ Tudo perfeitamente sincronizado! (Mesma quantidade de IDs)');
+      } else {
+        if (missingInSupabase.length > 0) {
+          console.warn('❌ Faltam ' + missingInSupabase.length + ' registros no Supabase que estão no Local:');
+          missingInSupabase.forEach(v => {
+            const int = localIntegrados.find(i => i.id === v.integradoId);
+            console.warn('  - ID local: ' + v.id + ' | Data: ' + v.date + ' | Integrado: ' + (int?.name || 'Desconhecido'));
+          });
+        }
+        
+        if (missingInLocal.length > 0) {
+          console.warn('❌ Faltam ' + missingInLocal.length + ' registros no Local que estão no Supabase:');
+          missingInLocal.forEach(r => {
+            console.warn('  - ID supabase: ' + r.id + ' | Data: ' + r['Data'] + ' | Integrado: ' + r['Integrado']);
+          });
+        }
+      }
+
+      console.log('--- FIM DA VERIFICAÇÃO ---');
+      
+      console.log('Checando políticas (RLS) para possíveis falhas de insert...');
+      const { data: testData, error: testError } = await supabase.from('registros').insert([{ 'Data': 'TEST_RLS' }]).select();
+      if (testError && testError.code === '42501') {
+        console.error('🚨 ERRO GRAVE DE RLS DETECTADO: Políticas do Supabase estão bloqueando INSERTS.');
+        console.error('Para consertar, rode isso no SQL Editor do Supabase: ALTER TABLE registros DISABLE ROW LEVEL SECURITY;');
+      } else if (!testError) {
+        console.log('✅ RLS parece estar permitindo inserts. (Apagando dado de teste...)');
+        await supabase.from('registros').delete().eq('Data', 'TEST_RLS');
+      }
+
+    } catch (error: any) {
+      console.error('Erro ao verificar consistência:', error.message);
+    }
   }
 };
+
+
+if (typeof window !== 'undefined') {
+  (window as any).verifyDataConsistency = storage.verifyDataConsistency;
+}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { preprocessImportData } from '../utils/import-parser';
 import { storage } from '../lib/storage';
 import * as XLSX from 'xlsx';
@@ -7,12 +7,52 @@ interface ImportDataProps {
   onImportComplete: () => void;
 }
 
+interface ErrorHistoryEntry {
+  timestamp: string;
+  errors: string[];
+}
+
 export function ImportData({ onImportComplete }: ImportDataProps) {
   const [rawData, setRawData] = useState('');
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
+  const [errorHistory, setErrorHistory] = useState<ErrorHistoryEntry[]>([]);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [showErrorHistory, setShowErrorHistory] = useState(false);
+
+  useEffect(() => {
+    try {
+      const historyStr = localStorage.getItem('IMPORT_ERRORS_HISTORY');
+      if (historyStr) {
+        setErrorHistory(JSON.parse(historyStr));
+      }
+    } catch (e) {
+      console.error('Failed to load error history', e);
+    }
+  }, []);
+
+  const saveToErrorHistory = (newErrors: string[]) => {
+    if (newErrors.length === 0) return;
+    
+    const entry: ErrorHistoryEntry = {
+      timestamp: new Date().toLocaleString('pt-BR'),
+      errors: newErrors
+    };
+    
+    const updatedHistory = [entry, ...errorHistory].slice(0, 10); // Keep last 10 imports with errors
+    setErrorHistory(updatedHistory);
+    try {
+      localStorage.setItem('IMPORT_ERRORS_HISTORY', JSON.stringify(updatedHistory));
+    } catch (e) {
+      console.error('Failed to save error history', e);
+    }
+  };
+
+  const clearErrorHistory = () => {
+    setErrorHistory([]);
+    localStorage.removeItem('IMPORT_ERRORS_HISTORY');
+  };
   
   const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
@@ -31,7 +71,18 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
       
       setLogs(prev => [...prev, ...processLogs]);
       setErrors(processErrors);
+      saveToErrorHistory(processErrors);
       
+      if (integrados.length === 0 && visits.length === 0) {
+        if (processErrors.length > 0) {
+          addLog('A importação falhou. Nenhum registro válido foi encontrado.');
+        } else {
+          addLog('Nenhum registro para importar.');
+        }
+        setLoading(false);
+        return;
+      }
+
       if (processErrors.length > 0) {
         addLog(`Foram encontrados ${processErrors.length} erros. Importando registros válidos...`);
       }
@@ -52,8 +103,8 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
       const newVisits = [...currentVisits];
       visits.forEach(v => {
          const existingIndex = newVisits.findIndex(existing => 
-            existing.id === v.id || 
-            (existing.integradoId === v.integradoId && existing.date === v.date)
+             existing.id === v.id || 
+             (existing.integradoId === v.integradoId && existing.date === v.date)
          );
          if (existingIndex >= 0) {
             newVisits[existingIndex] = { ...newVisits[existingIndex], ...v, id: newVisits[existingIndex].id }; // Update existing but keep UUID
@@ -66,12 +117,16 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
       await storage.saveVisits(newVisits);
       
       addLog('Importação concluída com sucesso!');
-      setTimeout(() => {
-        onImportComplete();
-      }, 2000);
+      if (integrados.length > 0 || visits.length > 0) {
+        setTimeout(() => {
+          onImportComplete();
+        }, 3000);
+      }
       
     } catch (e: any) {
       addLog(`Erro durante a importação: ${e.message}`);
+      setErrors([e.message]);
+      saveToErrorHistory([e.message]);
     } finally {
       setLoading(false);
     }
@@ -83,17 +138,17 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+    if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
           const data = new Uint8Array(event.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array', raw: true });
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
           
           // Convert to standard tab-separated string
-          const csvData = XLSX.utils.sheet_to_csv(worksheet, { FS: '\t' });
+          const csvData = XLSX.utils.sheet_to_csv(worksheet, { FS: '\t', dateNF: 'YYYY-MM-DD' });
           
           setRawData(csvData);
           addLog(`Arquivo '${file.name}' carregado. Verifique os dados abaixo e inicie a importação.`);
@@ -119,11 +174,51 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
 
   return (
     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-      <h2 className="text-lg font-bold text-slate-800 mb-4">Importar Dados</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-bold text-slate-800">Importar Dados</h2>
+        <button
+          onClick={() => setShowErrorHistory(!showErrorHistory)}
+          className="text-sm font-medium text-slate-600 hover:text-slate-800 underline decoration-slate-300"
+        >
+          {showErrorHistory ? 'Ocultar Histórico de Erros' : 'Ver Histórico de Erros'}
+        </button>
+      </div>
+
+      {showErrorHistory && (
+        <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-semibold text-slate-700">Histórico de Erros de Importação</h3>
+            {errorHistory.length > 0 && (
+              <button 
+                onClick={clearErrorHistory}
+                className="text-xs text-red-600 hover:text-red-700 font-medium"
+              >
+                Limpar Histórico
+              </button>
+            )}
+          </div>
+          {errorHistory.length === 0 ? (
+            <p className="text-sm text-slate-500">Nenhum erro registrado no histórico.</p>
+          ) : (
+            <div className="space-y-4 max-h-64 overflow-y-auto pr-2">
+              {errorHistory.map((entry, idx) => (
+                <div key={idx} className="bg-white p-3 border border-red-100 rounded shadow-sm">
+                  <p className="text-xs font-semibold text-slate-500 mb-2">{entry.timestamp}</p>
+                  <ul className="list-disc pl-5 text-sm text-red-600 space-y-1">
+                    {entry.errors.map((err, errIdx) => (
+                      <li key={errIdx}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <p className="text-sm text-slate-600 mb-4">
-        Anexe o arquivo (.txt, .csv, .tsv, .xlsx) ou cole abaixo os dados extraídos do Excel. 
-        O sistema espera as colunas na seguinte ordem: <strong>Data, Integrado, Alojamento, Idade, Recomendação, Consumo acumulado, Mortalidade, Comedouro, Colaborador, Consumos de Ração/meta, Peso aloj, Pontuação Sanitária</strong>.
-        As datas devem estar no formato DD/MM/AAAA.
+        Anexe o arquivo (.txt, .csv, .tsv, .xlsx) ou cole abaixo os dados.
+        O sistema reconhece automaticamente as colunas. As datas devem estar no formato DD/MM/AAAA.
       </p>
       
       <div className="mb-4">
@@ -131,7 +226,7 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
         <input 
           ref={fileInputRef}
           type="file" 
-          accept=".txt,.csv,.tsv,.xlsx,.xls" 
+          accept=".txt,.csv,.tsv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain,*/*" 
           onChange={handleFileUpload}
           className="block w-full text-sm text-slate-500
             file:mr-4 file:py-2 file:px-4
@@ -164,12 +259,16 @@ export function ImportData({ onImportComplete }: ImportDataProps) {
             <span className="text-sm text-red-600 font-bold">Apagar TUDO?</span>
             <button 
               onClick={async () => {
-                await storage.clearAll();
-                addLog('Todos os dados foram apagados.');
-                setConfirmDeleteAll(false);
-                setTimeout(() => {
-                  onImportComplete();
-                }, 1000);
+                try {
+                  await storage.clearAll();
+                  addLog('Todos os dados foram apagados.');
+                  setConfirmDeleteAll(false);
+                  setTimeout(() => {
+                    onImportComplete();
+                  }, 1000);
+                } catch (e: any) {
+                  alert(`Erro ao apagar os dados:\n\n${e.message}\n\nSe for um erro de RLS (Row-Level Security), vá ao painel do Supabase, acesse o SQL Editor e execute:\nALTER TABLE registros DISABLE ROW LEVEL SECURITY;`);
+                }
               }}
               disabled={loading}
               className="bg-red-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-red-700 transition disabled:opacity-50"

@@ -9,8 +9,8 @@ interface SidebarProps {
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: Home },
-  { id: 'visitas', label: 'Lançamentos', icon: ClipboardList },
-  { id: 'integrados', label: 'Histórico', icon: Users },
+  { id: 'visitas', label: 'Visitas', icon: ClipboardList },
+  { id: 'integrados', label: 'Lotes e Integrados', icon: Users },
   { id: 'curva', label: 'Curva de Referência', icon: LineChart },
   { id: 'importar', label: 'Importar Dados', icon: ClipboardList },
 ];

@@ -1,3 +1,4 @@
+import { ErrorBoundary } from './components/ErrorBoundary';
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
@@ -10,7 +11,7 @@ import { ImportData } from './components/ImportData';
 import { Login } from './components/Login';
 import { Notifications } from './components/Notifications';
 import { Visit, Integrado } from './types';
-import { Menu, X, LogOut, Download } from 'lucide-react';
+import { Menu, X, LogOut, Download, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { storage } from './lib/storage';
 import { supabase } from './lib/supabase';
@@ -27,6 +28,34 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<any>(null);
   const [dbError, setDbError] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? window.navigator.onLine : true);
+
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  useEffect(() => {
+    const handleOnline = async () => {
+      setIsOnline(true);
+      setIsSyncing(true);
+      await loadData();
+      setIsSyncing(false);
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const handleForceSync = async () => {
+    if (!isOnline) return;
+    setIsSyncing(true);
+    await loadData();
+    setIsSyncing(false);
+  };
 
   const checkConnection = async () => {
     try {
@@ -152,38 +181,56 @@ export default function App() {
 
   const handleAddVisit = async (newVisit: Visit, integradoNome?: string, alojamentoDate?: string) => {
     setIsVisitFormOpen(false);
-    await processIntegradoFromVisit(newVisit, integradoNome, alojamentoDate);
-    const updatedVisits = [...visits, newVisit];
-    setVisits(updatedVisits);
-    const savedVisits = await storage.saveVisits(updatedVisits, [newVisit]);
-    setVisits([...savedVisits]);
-    
-    // Create local backup to IndexedDB
-    await saveBackupToIndexedDB();
+    try {
+      await processIntegradoFromVisit(newVisit, integradoNome, alojamentoDate);
+      const updatedVisits = [...visits, newVisit];
+      setVisits(updatedVisits);
+      const savedVisits = await storage.saveVisits(updatedVisits, [newVisit]);
+      setVisits([...savedVisits]);
+      
+      // Create local backup to IndexedDB
+      await saveBackupToIndexedDB();
+    } catch (error: any) {
+      alert(`Erro ao salvar lançamento:\n\n${error.message}\n\nSe for um erro de RLS (Row-Level Security), vá ao painel do Supabase, acesse o SQL Editor e execute:\nALTER TABLE registros DISABLE ROW LEVEL SECURITY;`);
+      // Revert the optimistic update if needed, but for now we just show the error.
+    }
   };
 
   const handleUpdateVisit = async (updatedVisit: Visit, integradoNome?: string, alojamentoDate?: string) => {
     setEditingVisitId(null);
     setIsVisitFormOpen(false);
-    await processIntegradoFromVisit(updatedVisit, integradoNome, alojamentoDate);
-    const updatedVisits = visits.map(v => v.id === updatedVisit.id ? updatedVisit : v);
-    setVisits(updatedVisits);
-    const savedVisits = await storage.saveVisits(updatedVisits, [updatedVisit]);
-    setVisits([...savedVisits]);
-    
-    // Create local backup to IndexedDB
-    await saveBackupToIndexedDB();
+    try {
+      await processIntegradoFromVisit(updatedVisit, integradoNome, alojamentoDate);
+      const updatedVisits = visits.map(v => v.id === updatedVisit.id ? updatedVisit : v);
+      setVisits(updatedVisits);
+      const savedVisits = await storage.saveVisits(updatedVisits, [updatedVisit]);
+      setVisits([...savedVisits]);
+      
+      // Create local backup to IndexedDB
+      await saveBackupToIndexedDB();
+    } catch (error: any) {
+      alert(`Erro ao atualizar lançamento:\n\n${error.message}\n\nSe for um erro de RLS (Row-Level Security), vá ao painel do Supabase, acesse o SQL Editor e execute:\nALTER TABLE registros DISABLE ROW LEVEL SECURITY;`);
+    }
   };
 
   const handleDeleteVisit = async (id: string) => {
-    const updatedVisits = visits.filter(v => v.id !== id);
-    setVisits(updatedVisits);
-    await storage.deleteVisit(id);
+    try {
+      const updatedVisits = visits.filter(v => v.id !== id);
+      setVisits(updatedVisits);
+      await storage.deleteVisit(id);
+    } catch (error: any) {
+      alert(`Erro ao deletar lançamento:\n\n${error.message}\n\nSe for um erro de RLS (Row-Level Security), vá ao painel do Supabase, acesse o SQL Editor e execute:\nALTER TABLE registros DISABLE ROW LEVEL SECURITY;`);
+    }
   };
 
   const handleEditVisitClick = (id: string) => {
     setEditingVisitId(id);
     setIsVisitFormOpen(true);
+  };
+
+  const handleNavigateToEditVisit = (id: string) => {
+    setCurrentTab('visitas');
+    handleEditVisitClick(id);
   };
 
   const handleTabChange = (tab: string) => {
@@ -194,69 +241,112 @@ export default function App() {
   };
 
 
-  const handleExport = () => {
-    const dataToExport = visits.map(v => {
-      const integrado = integrados.find(i => i.id === v.integradoId);
-      const dataFormatada = v.date ? new Date(Number(v.date.split('-')[0]), Number(v.date.split('-')[1]) - 1, Number(v.date.split('-')[2])).toLocaleDateString('pt-BR') : '';
-      
-      return {
-        'Data': dataFormatada,
-        'Integrado': integrado?.name || '',
-        'Alojamento': integrado?.alojamentoDate ? new Date(Number(integrado.alojamentoDate.split('-')[0]), Number(integrado.alojamentoDate.split('-')[1]) - 1, Number(integrado.alojamentoDate.split('-')[2])).toLocaleDateString('pt-BR') : '',
-        'Idade': v.idade,
-        'Animais Alojados': v.animaisAlojados || '',
-        'Recomendação': v.recomendacao || '',
-        'Consumo acumulado': v.consumoAcumuladoReal ?? '',
-        'Animais Mortos': v.animaisMortos ?? '',
-        'Comedouro': v.comedouro || '',
-        'Colaborador': v.colaborador ? v.colaborador.replace(/\s*,\s*/g, ' / ') : '',
-        'Meta Aloj': v.metaAlojamento || '',
-        'Cons. Aloj': v.consumoAlojamento || '',
-        'Meta Cresc 1': v.metaCrescimento1 || '',
-        'Cons. Cresc 1': v.consumoCrescimento1 || '',
-        'Meta Cresc 2': v.metaCrescimento2 || '',
-        'Cons. Cresc 2': v.consumoCrescimento2 || '',
-        'Meta Cresc 3': v.metaCrescimento3 || '',
-        'Cons. Cresc 3': v.consumoCrescimento3 || '',
-        'Meta Term 1': v.metaTerminacao1 || '',
-        'Cons. Term 1': v.consumoTerminacao1 || '',
-        'Meta Term 2': v.metaTerminacao2 || '',
-        'Cons. Term 2': v.consumoTerminacao2 || '',
-        'Cons. Acum. Real': v.consumoAcumuladoReal ?? '',
-        'Meta Acum.': v.metaAcumulada || '',
-        'Peso aloj': v.pesoAloj || '',
-        'Pontuação Sanitária': v.pontuacaoSanitaria || '',
-      };
-    });
-
-    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const handleExport = (filteredVisits?: Visit[] | any) => {
+    // Check if filteredVisits is truly an array (and not an Event object)
+    const isArray = Array.isArray(filteredVisits);
+    const listToExport = isArray && filteredVisits.length > 0 ? filteredVisits : visits;
     
-    // Auto-size columns slightly
-    const colWidths = [
-      { wch: 15 }, // Data
-      { wch: 25 }, // Integrado
-      { wch: 10 }, // Lote
-      { wch: 18 }, // Alojamento
-      { wch: 12 }, // Idade
-      { wch: 18 }, // Consumo
-      { wch: 15 }, // Mortalidade
-      { wch: 20 }, // Comedouro
-      { wch: 40 }, // Recomendação
-      { wch: 25 }  // Colaborador
+    if (!listToExport || listToExport.length === 0) {
+      alert('Não há dados para exportar.');
+      return;
+    }
+    
+    // Explicit headers
+    const header = [
+      'Data', 'Integrado', 'Alojamento', 'Idade', 'Animais Alojados', 
+      'Animais Mortos', 'Vol. Cargas (kg)', 'Recomendação', 'Consumo acumulado', 
+      'Comedouro', 'Colaborador', 'Meta Aloj', 'Cons. Aloj', 
+      'Meta Cresc 1', 'Cons. Cresc 1', 'Meta Cresc 2', 'Cons. Cresc 2', 
+      'Meta Cresc 3', 'Cons. Cresc 3', 'Meta Term 1', 'Cons. Term 1', 
+      'Meta Term 2', 'Cons. Term 2', 'Meta Acum.', 'Peso aloj', 'Pontuação Sanitária'
     ];
-    worksheet['!cols'] = colWidths;
 
+    // Explicit data matrix
+    const dataToExport = [
+      header,
+      ...listToExport.map((v: Visit) => {
+        const integrado = integrados.find(i => i.id === v.integradoId);
+        
+        let dataFormatada = '';
+        if (v.date) {
+          const parts = v.date.split('-');
+          if (parts.length === 3) {
+            dataFormatada = `${parts[2]}/${parts[1]}/${parts[0]}`;
+          } else {
+            dataFormatada = v.date;
+          }
+        }
+        
+        let alojamentoFormatado = '';
+        if (integrado?.alojamentoDate) {
+          const parts = integrado.alojamentoDate.split('-');
+          if (parts.length === 3) {
+            alojamentoFormatado = `${parts[2]}/${parts[1]}/${parts[0]}`;
+          } else {
+            alojamentoFormatado = integrado.alojamentoDate;
+          }
+        }
+        
+        return [
+          dataFormatada,
+          integrado?.name || '',
+          alojamentoFormatado,
+          v.idade !== undefined && v.idade !== null ? String(v.idade) : '',
+          v.animaisAlojados !== undefined && v.animaisAlojados !== null ? String(v.animaisAlojados) : '',
+          v.animaisMortos !== undefined && v.animaisMortos !== null ? String(v.animaisMortos) : '',
+          v.volumeTotalCargas !== undefined && v.volumeTotalCargas !== null ? String(v.volumeTotalCargas) : '',
+          v.recomendacao || '',
+          v.consumoAcumuladoReal !== undefined && v.consumoAcumuladoReal !== null ? String(v.consumoAcumuladoReal) : '',
+          
+          v.comedouro || '',
+          v.colaborador ? v.colaborador.replace(/\s*,\s*/g, ' / ') : '',
+          v.metaAlojamento !== undefined && v.metaAlojamento !== null ? String(v.metaAlojamento) : '',
+          v.consumoAlojamento !== undefined && v.consumoAlojamento !== null ? String(v.consumoAlojamento) : '',
+          v.metaCrescimento1 !== undefined && v.metaCrescimento1 !== null ? String(v.metaCrescimento1) : '',
+          v.consumoCrescimento1 !== undefined && v.consumoCrescimento1 !== null ? String(v.consumoCrescimento1) : '',
+          v.metaCrescimento2 !== undefined && v.metaCrescimento2 !== null ? String(v.metaCrescimento2) : '',
+          v.consumoCrescimento2 !== undefined && v.consumoCrescimento2 !== null ? String(v.consumoCrescimento2) : '',
+          v.metaCrescimento3 !== undefined && v.metaCrescimento3 !== null ? String(v.metaCrescimento3) : '',
+          v.consumoCrescimento3 !== undefined && v.consumoCrescimento3 !== null ? String(v.consumoCrescimento3) : '',
+          v.metaTerminacao1 !== undefined && v.metaTerminacao1 !== null ? String(v.metaTerminacao1) : '',
+          v.consumoTerminacao1 !== undefined && v.consumoTerminacao1 !== null ? String(v.consumoTerminacao1) : '',
+          v.metaTerminacao2 !== undefined && v.metaTerminacao2 !== null ? String(v.metaTerminacao2) : '',
+          v.consumoTerminacao2 !== undefined && v.consumoTerminacao2 !== null ? String(v.consumoTerminacao2) : '',
+          v.metaAcumulada !== undefined && v.metaAcumulada !== null ? String(v.metaAcumulada) : '',
+          v.pesoAloj !== undefined && v.pesoAloj !== null ? String(v.pesoAloj) : '',
+          v.pontuacaoSanitaria || ''
+        ];
+      })
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Visitas");
     
-    XLSX.writeFile(workbook, `relatorio_visitas_${new Date().toISOString().split('T')[0]}.xlsx`);
+    // Fallback manual blob download for better mobile support
+    try {
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8' });
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `relatorio_visitas_${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error exporting:', err);
+      XLSX.writeFile(workbook, `relatorio_visitas_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }
   };
 
   const renderContent = () => {
     return (
       <>
         <div style={{ display: currentTab === 'dashboard' ? 'block' : 'none' }}>
-          <Dashboard visits={visits} integrados={integrados} />
+          <Dashboard visits={visits} integrados={integrados} onNavigateToVisit={handleNavigateToEditVisit} />
         </div>
         
         {currentTab === 'visitas' && (
@@ -297,14 +387,18 @@ export default function App() {
               await storage.saveVisits(visits, visitsToSync);
             }}
             onDelete={async (id) => {
-              const updatedIntegrados = integrados.filter(i => i.id !== id);
-              setIntegrados(updatedIntegrados);
-              
-              const visitsToDelete = visits.filter(v => v.integradoId === id).map(v => v.id);
-              const updatedVisits = visits.filter(v => v.integradoId !== id);
-              setVisits(updatedVisits);
-              
-              await storage.deleteIntegrado(id, visitsToDelete as string[]);
+              try {
+                const updatedIntegrados = integrados.filter(i => i.id !== id);
+                setIntegrados(updatedIntegrados);
+                
+                const visitsToDelete = visits.filter(v => v.integradoId === id).map(v => v.id);
+                const updatedVisits = visits.filter(v => v.integradoId !== id);
+                setVisits(updatedVisits);
+                
+                await storage.deleteIntegrado(id, visitsToDelete as string[]);
+              } catch (error: any) {
+                alert(`Erro ao deletar integrado:\n\n${error.message}\n\nSe for um erro de RLS (Row-Level Security), vá ao painel do Supabase, acesse o SQL Editor e execute:\nALTER TABLE registros DISABLE ROW LEVEL SECURITY;`);
+              }
             }}
           />
         )}
@@ -318,7 +412,7 @@ export default function App() {
   const getPageTitle = () => {
     switch(currentTab) {
       case 'dashboard': return 'Dashboard de Desempenho';
-      case 'visitas': return isVisitFormOpen ? (editingVisitId ? 'Editar Lançamento' : 'Novo Lançamento') : 'Lançamentos';
+      case 'visitas': return isVisitFormOpen ? (editingVisitId ? 'Editar Lançamento' : 'Novo Lançamento') : 'Visitas';
       case 'integrados': return 'Histórico de Integrados';
       case 'curva': return 'Curva de Referência';
       case 'importar': return 'Importar Base de Dados';
@@ -369,6 +463,26 @@ export default function App() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-slate-500 hidden sm:inline-block">Data de Campo: {new Date().toLocaleDateString('pt-BR')}</span>
+            
+            <div className="flex items-center gap-2 mr-2">
+              {isOnline ? (
+                <button 
+                  onClick={handleForceSync}
+                  disabled={isSyncing}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-full hover:bg-emerald-100 transition-colors border border-emerald-200"
+                  title="Sincronizar dados agora"
+                >
+                  <Wifi className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Online</span>
+                  {isSyncing && <RefreshCw className="w-3 h-3 animate-spin ml-1" />}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-amber-50 text-amber-700 rounded-full border border-amber-200">
+                  <WifiOff className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Offline</span>
+                </div>
+              )}
+            </div>
             <Notifications visits={visits} integrados={integrados} />
             <button onClick={handleLogout} className="text-slate-500 hover:text-slate-700 flex items-center gap-1 text-sm font-medium transition-colors" title="Sair">
               <LogOut className="w-5 h-5" />
@@ -392,7 +506,9 @@ export default function App() {
                 </div>
               </div>
             )}
-            {renderContent()}
+            <ErrorBoundary>
+              {renderContent()}
+            </ErrorBoundary>
           </div>
         </div>
       </main>

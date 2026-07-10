@@ -11,10 +11,17 @@ import { FileDown, Filter, Calendar, Download, TrendingUp, TrendingDown, AlertTr
 interface DashboardProps {
   visits: Visit[];
   integrados: Integrado[];
+  onNavigateToVisit?: (visitId: string) => void;
 }
 
-export function Dashboard({ visits, integrados }: DashboardProps) {
-  const [selectedIntegradoIds, setSelectedIntegradoIds] = useState<string[]>([]);
+export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardProps) {
+  const [selectedIntegradoIds, setSelectedIntegradoIds] = useState<string[]>(() => {
+    const saved = localStorage.getItem('DASHBOARD_SELECTED_INTEGRADOS');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return [];
+  });
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const dashboardRef = useRef<HTMLDivElement>(null);
@@ -29,9 +36,25 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<string>('name-asc');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
+    return localStorage.getItem('DASHBOARD_SELECTED_PERIOD') || 'all';
+  });
+  const [sortBy, setSortBy] = useState<string>(() => {
+    return localStorage.getItem('DASHBOARD_SORT_BY') || 'name-asc';
+  });
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  useEffect(() => {
+    localStorage.setItem('DASHBOARD_SELECTED_INTEGRADOS', JSON.stringify(selectedIntegradoIds));
+  }, [selectedIntegradoIds]);
+
+  useEffect(() => {
+    localStorage.setItem('DASHBOARD_SELECTED_PERIOD', selectedPeriod);
+  }, [selectedPeriod]);
+
+  useEffect(() => {
+    localStorage.setItem('DASHBOARD_SORT_BY', sortBy);
+  }, [sortBy]);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -101,14 +124,14 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
     }
     ages.add(100);
 
-    filteredVisits.forEach(v => ages.add(v.idade));
+    filteredVisits.forEach(v => ages.add(Number(v.idade)));
 
     const sortedAges = Array.from(ages).sort((a, b) => a - b);
 
     return sortedAges.map(idade => {
       const expected = getExpectedConsumption(idade);
       
-      const visitsAtAge = filteredVisits.filter(v => v.idade === idade);
+      const visitsAtAge = filteredVisits.filter(v => Number(v.idade) === idade);
       const dataPoint: any = {
         idade,
         consumoEsperado: expected,
@@ -116,8 +139,8 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
       };
       
       visitsAtAge.forEach(v => {
-        if (v.consumoAcumuladoReal && v.consumoAcumuladoReal > 0) {
-          dataPoint[v.integradoId] = v.consumoAcumuladoReal;
+        if (v.consumoAcumuladoReal && Number(v.consumoAcumuladoReal) > 0) {
+          dataPoint[v.integradoId] = Number(v.consumoAcumuladoReal);
         }
       });
 
@@ -129,16 +152,28 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
   const latestVisitsData = useMemo(() => {
     const latestVisitsMap = new Map<string, Visit>();
     filteredVisits.forEach(v => {
-      if (!v.consumoAcumuladoReal || v.consumoAcumuladoReal === 0) return;
       const existing = latestVisitsMap.get(v.integradoId);
-      if (!existing || new Date(v.date).getTime() > new Date(existing.date).getTime()) {
+      if (!existing) {
         latestVisitsMap.set(v.integradoId, v);
+      } else {
+        const vConsumo = Number(v.consumoAcumuladoReal) || 0;
+        const exConsumo = Number(existing.consumoAcumuladoReal) || 0;
+        
+        if (vConsumo > exConsumo) {
+          latestVisitsMap.set(v.integradoId, v);
+        } else if (vConsumo === exConsumo) {
+          if (new Date(v.date).getTime() > new Date(existing.date).getTime()) {
+            latestVisitsMap.set(v.integradoId, v);
+          }
+        }
       }
     });
 
-    return Array.from(latestVisitsMap.values()).map(v => {
+    return Array.from(latestVisitsMap.values())
+      .filter(v => Number(v.consumoAcumuladoReal) > 0)
+      .map(v => {
       const integrado = filteredIntegrados.find(i => i.id === v.integradoId);
-      const expected = getExpectedConsumption(v.idade);
+      const expected = getExpectedConsumption(Number(v.idade));
       
       const abbreviateName = (name?: string) => {
         if (!name) return 'Desconhecido';
@@ -155,7 +190,7 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
         name: integrado ? abbreviateName(integrado.name) : 'Desconhecido',
         fullName: integrado?.name || 'Desconhecido',
         date: v.date,
-        idade: v.idade,
+        idade: Number(v.idade),
         consumoReal: Number(v.consumoAcumuladoReal),
         consumoEsperado: expected,
         diferenca: Number((Number(v.consumoAcumuladoReal) - expected).toFixed(2)),
@@ -236,7 +271,7 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
   return (
     <div className="space-y-6" ref={dashboardRef}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h1 className="text-2xl font-bold text-slate-800">Dashboard de Consumo</h1>
+        <h1 className="text-2xl font-bold text-slate-800">Dashboard de Desempenho</h1>
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
           
           {selectedIntegradoIds.length === 1 && (
@@ -337,7 +372,7 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
           <div>
-            <p className="text-xs font-bold text-slate-400 uppercase mb-1">Total Integrados</p>
+            <p className="text-xs font-bold text-slate-400 uppercase mb-1">Total de Lotes</p>
             <p className="text-3xl font-bold text-slate-800">{stats.totalIntegrados}</p>
           </div>
           <p className="text-xs text-blue-600 font-medium mt-3">Lotes em andamento</p>
@@ -367,7 +402,7 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
 
         <div className="bg-blue-600 rounded-xl p-5 shadow-lg text-white flex flex-col justify-between">
           <div>
-            <p className="text-xs font-bold text-blue-100 uppercase mb-1">Média Mortalidade</p>
+            <p className="text-xs font-bold text-blue-100 uppercase mb-1">Mortalidade Média</p>
             <p className="text-3xl font-bold">{stats.avgMortalidade.toFixed(2)}%</p>
           </div>
           <p className="text-xs text-blue-200 font-medium mt-3">Média dos lotes em andamento</p>
@@ -517,7 +552,13 @@ export function Dashboard({ visits, integrados }: DashboardProps) {
                   {latestVisitsData.length > 0 ? (
                     latestVisitsData.map((row) => (
                       <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{row.name}</td>
+                        <td 
+                          className={`px-4 py-3 font-medium whitespace-nowrap ${onNavigateToVisit ? 'text-blue-600 hover:text-blue-800 cursor-pointer underline' : 'text-slate-800'}`}
+                          onClick={() => onNavigateToVisit && onNavigateToVisit(row.id)}
+                          title={onNavigateToVisit ? "Clique para editar este lançamento" : ""}
+                        >
+                          {row.name}
+                        </td>
                         <td className="px-4 py-3 text-slate-600 text-center">{row.idade} d</td>
                         <td className="px-4 py-3 text-slate-600 text-right font-medium">{row.consumoReal.toFixed(2)} kg</td>
                         <td className="px-4 py-3 text-right">
