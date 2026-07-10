@@ -154,11 +154,16 @@ export const storage = {
         
         const dataVisita = formatDate(getCol(row, 'Data') || '');
         if (dataVisita) {
+          const vDate = new Date(dataVisita + 'T12:00:00');
+          const aDate = new Date(alojamentoData + 'T12:00:00');
+          const diffDays = Math.round((vDate.getTime() - aDate.getTime()) / (1000 * 60 * 60 * 24));
+          const calculatedIdade = diffDays >= 0 ? diffDays + 1 : 1;
+
           visits.push({
             id: getCol(row, 'id'),
             integradoId: integradoId,
             date: dataVisita,
-            idade: parseFloatSafe(getCol(row, 'Idade')) || 0,
+            idade: calculatedIdade,
             animaisAlojados: parseFloatSafe(getCol(row, 'Animais Alojados')),
             animaisMortos: parseFloatSafe(getCol(row, 'Animais Mortos')),
             mortalidade: parseFloatSafe(getCol(row, 'Mortalidade')),

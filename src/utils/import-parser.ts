@@ -219,16 +219,9 @@ export function preprocessImportData(rawData: string): PreProcessedData {
     // Calcular idade
     const pDate = new Date(finalDateStr + 'T12:00:00');
     const pAloj = new Date(finalAlojamentoStr + 'T12:00:00');
-    let idadeStr = getCol('idade');
-    let calculatedIdade = parseInt(idadeStr || '0', 10) || 0;
-    
-    if (!calculatedIdade) {
-      const diffTime = pDate.getTime() - pAloj.getTime();
-      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-      if (diffDays >= -10 && diffDays <= 200) {
-        calculatedIdade = diffDays;
-      }
-    }
+    const diffTime = pDate.getTime() - pAloj.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    const calculatedIdade = diffDays >= 0 ? diffDays + 1 : 1;
 
     const isClosed = calculatedIdade > 120;
     name = name.trim();

@@ -147,7 +147,7 @@ export function VisitaForm({ integrados, visits = [], initialData, onSave, onCan
          
          const diffTime = visitDate.getTime() - alojamentoDate.getTime();
          const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-         newData.idade = diffDays >= 0 ? diffDays : 0;
+         newData.idade = diffDays >= 0 ? diffDays + 1 : 1;
       }
       return newData;
     });

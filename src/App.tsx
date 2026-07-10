@@ -63,6 +63,8 @@ export default function App() {
       if (error) {
         if ((error?.message?.includes('fetch') || error?.message?.includes('Failed') || error?.code === '0' || String(error).includes('fetch') || String(error).includes('Failed'))) {
           setDbError(null); // Ignore in offline mode
+        } else if (error?.message?.includes('relation "public.profiles" does not exist')) {
+          setDbError(`Erro no Supabase: A tabela 'registros' possui uma regra (Policy/RLS) que tenta acessar a tabela 'profiles', que foi deletada. Desative o RLS ou remova a regra no painel do Supabase.`);
         } else {
           setDbError(`Erro ao conectar com a tabela 'registros': ${error.message}`);
         }
