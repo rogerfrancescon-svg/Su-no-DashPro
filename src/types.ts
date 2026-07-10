@@ -19,6 +19,7 @@ export interface Visit {
   animaisMortos?: number;
   volumeTotalCargas?: number;
   comedouro: 'Linear' | 'Automático' | 'Misto';
+  tipoLote?: 'Misto' | 'Fêmea';
   colaborador: string;
   consumoRacaoMeta?: string | Record<string, any>;
   pesoAloj?: number;

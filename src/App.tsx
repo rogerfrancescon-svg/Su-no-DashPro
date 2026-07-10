@@ -255,7 +255,7 @@ export default function App() {
     
     // Explicit headers
     const header = [
-      'Data', 'Integrado', 'Alojamento', 'Idade', 'Animais Alojados', 
+      'Data', 'Integrado', 'Alojamento', 'Tipo Lote', 'Idade', 'Animais Alojados', 
       'Animais Mortos', 'Vol. Cargas (kg)', 'Recomendação', 'Consumo acumulado', 
       'Comedouro', 'Colaborador', 'Meta Aloj', 'Cons. Aloj', 
       'Meta Cresc 1', 'Cons. Cresc 1', 'Meta Cresc 2', 'Cons. Cresc 2', 
@@ -293,6 +293,7 @@ export default function App() {
           dataFormatada,
           integrado?.name || '',
           alojamentoFormatado,
+          v.tipoLote || 'Misto',
           v.idade !== undefined && v.idade !== null ? String(v.idade) : '',
           v.animaisAlojados !== undefined && v.animaisAlojados !== null ? String(v.animaisAlojados) : '',
           v.animaisMortos !== undefined && v.animaisMortos !== null ? String(v.animaisMortos) : '',

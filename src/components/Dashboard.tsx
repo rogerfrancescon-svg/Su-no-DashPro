@@ -129,9 +129,14 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
     const sortedAges = Array.from(ages).sort((a, b) => a - b);
 
     return sortedAges.map(idade => {
-      const expected = getExpectedConsumption(idade);
-      
       const visitsAtAge = filteredVisits.filter(v => Number(v.idade) === idade);
+      
+      let totalExpected = 0;
+      visitsAtAge.forEach(v => {
+        totalExpected += getExpectedConsumption(idade, v.tipoLote);
+      });
+      const expected = visitsAtAge.length > 0 ? totalExpected / visitsAtAge.length : getExpectedConsumption(idade);
+      
       const dataPoint: any = {
         idade,
         consumoEsperado: expected,
@@ -173,7 +178,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
       .filter(v => Number(v.consumoAcumuladoReal) > 0)
       .map(v => {
       const integrado = filteredIntegrados.find(i => i.id === v.integradoId);
-      const expected = getExpectedConsumption(Number(v.idade));
+      const expected = getExpectedConsumption(Number(v.idade), v.tipoLote);
       
       const abbreviateName = (name?: string) => {
         if (!name) return 'Desconhecido';
@@ -189,6 +194,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
         integradoId: v.integradoId,
         name: integrado ? abbreviateName(integrado.name) : 'Desconhecido',
         fullName: integrado?.name || 'Desconhecido',
+        tipoLote: v.tipoLote || 'Misto',
         date: v.date,
         idade: Number(v.idade),
         consumoReal: Number(v.consumoAcumuladoReal),
@@ -558,6 +564,9 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
                           title={onNavigateToVisit ? "Clique para editar este lançamento" : ""}
                         >
                           {row.name}
+                          <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500">
+                            {row.tipoLote}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-slate-600 text-center">{row.idade} d</td>
                         <td className="px-4 py-3 text-slate-600 text-right font-medium">{row.consumoReal.toFixed(2)} kg</td>

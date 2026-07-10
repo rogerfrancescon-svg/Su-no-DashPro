@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Visit, Integrado } from '../types';
-import { growthCurve, getExpectedConsumption } from '../data';
+import { growthCurve, growthCurveFemea, getExpectedConsumption, getExpectedWeight, defaultMetas, defaultMetasFemea } from '../data';
 import { Info } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 
@@ -14,27 +14,19 @@ interface VisitaFormProps {
 
 export function VisitaForm({ integrados, visits = [], initialData, onSave, onCancel }: VisitaFormProps) {
   const [formData, setFormData] = useState<Partial<Visit> & { alojamentoDate?: string, integradoNome?: string }>(() => {
-    const defaultMetas = {
-      metaAlojamento: 17.00,
-      metaCrescimento1: 30.82,
-      metaCrescimento2: 30.67,
-      metaCrescimento3: 45.71,
-      metaTerminacao1: 27.49,
-      metaTerminacao2: 63.15,
-      metaAcumulada: 214.85
-    };
-
     if (initialData) {
       const integrado = integrados.find(i => i.id === initialData.integradoId);
+      const metas = initialData.tipoLote === 'Fêmea' ? defaultMetasFemea : defaultMetas;
       return {
         ...initialData,
-        metaAlojamento: initialData.metaAlojamento ?? defaultMetas.metaAlojamento,
-        metaCrescimento1: initialData.metaCrescimento1 ?? defaultMetas.metaCrescimento1,
-        metaCrescimento2: initialData.metaCrescimento2 ?? defaultMetas.metaCrescimento2,
-        metaCrescimento3: initialData.metaCrescimento3 ?? defaultMetas.metaCrescimento3,
-        metaTerminacao1: initialData.metaTerminacao1 ?? defaultMetas.metaTerminacao1,
-        metaTerminacao2: initialData.metaTerminacao2 ?? defaultMetas.metaTerminacao2,
-        metaAcumulada: initialData.metaAcumulada ?? defaultMetas.metaAcumulada,
+        tipoLote: initialData.tipoLote || 'Misto',
+        metaAlojamento: initialData.metaAlojamento ?? metas.metaAlojamento,
+        metaCrescimento1: initialData.metaCrescimento1 ?? metas.metaCrescimento1,
+        metaCrescimento2: initialData.metaCrescimento2 ?? metas.metaCrescimento2,
+        metaCrescimento3: initialData.metaCrescimento3 ?? metas.metaCrescimento3,
+        metaTerminacao1: initialData.metaTerminacao1 ?? metas.metaTerminacao1,
+        metaTerminacao2: initialData.metaTerminacao2 ?? metas.metaTerminacao2,
+        metaAcumulada: initialData.metaAcumulada ?? metas.metaAcumulada,
         alojamentoDate: integrado?.alojamentoDate,
         integradoNome: integrado?.name
       };
@@ -43,6 +35,7 @@ export function VisitaForm({ integrados, visits = [], initialData, onSave, onCan
       ...defaultMetas,
       date: new Date().toISOString().split('T')[0],
       comedouro: 'Linear',
+      tipoLote: 'Misto',
       colaborador: 'Wagner'
     };
   });
@@ -80,6 +73,14 @@ export function VisitaForm({ integrados, visits = [], initialData, onSave, onCan
     
     let updates: any = { [name]: value };
     
+    if (name === 'tipoLote') {
+      const metas = value === 'Fêmea' ? defaultMetasFemea : defaultMetas;
+      updates = {
+        ...updates,
+        ...metas
+      };
+    }
+
     if (name === 'integradoNome') {
       const integrado = integrados.find(i => i.name.toLowerCase() === value.toLowerCase());
       if (integrado) {
@@ -147,14 +148,15 @@ export function VisitaForm({ integrados, visits = [], initialData, onSave, onCan
          
          const diffTime = visitDate.getTime() - alojamentoDate.getTime();
          const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-         newData.idade = diffDays >= 0 ? diffDays + 1 : 1;
+         newData.idade = diffDays >= 0 ? diffDays : 0;
       }
       return newData;
     });
   };
 
   const currentIdade = Number(formData.idade) || 0;
-  const expectedConsumption = currentIdade > 0 ? getExpectedConsumption(currentIdade) : null;
+  const expectedConsumption = currentIdade > 0 ? getExpectedConsumption(currentIdade, formData.tipoLote as any) : null;
+  const expectedWeight = currentIdade > 0 ? getExpectedWeight(currentIdade, formData.tipoLote as any) : null;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden max-w-4xl mx-auto">
@@ -217,6 +219,7 @@ export function VisitaForm({ integrados, visits = [], initialData, onSave, onCan
                 <span className="flex items-center gap-2">Animais Vivos: <strong className="text-blue-900">{(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0)}</strong> <span className="text-xs text-slate-500">({formData.animaisAlojados || 0} alojados)</span></span>
              </div>
              <div className="flex flex-col gap-1 text-slate-600 md:text-right mt-3 md:mt-0">
+                <span className="flex items-center gap-2 justify-end">Peso Esperado: <strong className="text-blue-900">{expectedWeight ? expectedWeight.toFixed(2) : '-'} kg</strong></span>
                 <span className="flex items-center gap-2 justify-end">Consumo Esperado: <strong className="text-blue-900">{expectedConsumption || '-'} kg/cab</strong></span>
                 <span className="flex items-center gap-2 justify-end">Consumo Real (Calculado): <strong className={formData.consumoAcumuladoReal && expectedConsumption && formData.consumoAcumuladoReal < expectedConsumption ? 'text-red-600' : 'text-green-600'}>{formData.consumoAcumuladoReal || '-'} kg/cab</strong></span>
              </div>
@@ -280,6 +283,19 @@ export function VisitaForm({ integrados, visits = [], initialData, onSave, onCan
               <option value="Linear">Linear</option>
               <option value="Automático">Automático</option>
               <option value="Misto">Misto</option>
+            </select>
+          </div>
+          
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Tipo de Lote</label>
+            <select 
+              name="tipoLote"
+              value={formData.tipoLote || 'Misto'}
+              onChange={handleChange}
+              className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            >
+              <option value="Misto">Misto</option>
+              <option value="Fêmea">Fêmea</option>
             </select>
           </div>
           

@@ -1,6 +1,6 @@
 import { Integrado, Visit } from '../types';
 import { supabase } from './supabase';
-import { defaultMetas } from '../data';
+import { defaultMetas, defaultMetasFemea } from '../data';
 
 const INTEGRADOS_KEY = 'suino_dashpro_integrados';
 const VISITS_KEY = 'suino_dashpro_visits';
@@ -157,8 +157,11 @@ export const storage = {
           const vDate = new Date(dataVisita + 'T12:00:00');
           const aDate = new Date(alojamentoData + 'T12:00:00');
           const diffDays = Math.round((vDate.getTime() - aDate.getTime()) / (1000 * 60 * 60 * 24));
-          const calculatedIdade = diffDays >= 0 ? diffDays + 1 : 1;
+          const calculatedIdade = diffDays >= 0 ? diffDays : 0;
 
+          const tipoLote = (getCol(row, 'Tipo Lote') as any) || 'Misto';
+          const metas = tipoLote === 'Fêmea' ? defaultMetasFemea : defaultMetas;
+          
           visits.push({
             id: getCol(row, 'id'),
             integradoId: integradoId,
@@ -172,22 +175,23 @@ export const storage = {
             consumoAcumuladoReal: parseFloatSafe(getCol(row, 'Consumo Acumulado Real') ?? getCol(row, 'Consumo acumulado')),
 
             comedouro: (getCol(row, 'Comedouro') as any) || 'Automático',
+            tipoLote,
             colaborador: getCol(row, 'Colaborador') || '',
             pesoAloj: parseFloatSafe(getCol(row, 'Peso aloj')),
             pontuacaoSanitaria: parseFloatSafe(getCol(row, 'Pontuação Sanitária')),
-            metaAlojamento: parseFloatSafe(getCol(row, 'Meta Aloj')) ?? defaultMetas.metaAlojamento,
+            metaAlojamento: parseFloatSafe(getCol(row, 'Meta Aloj')) ?? metas.metaAlojamento,
             consumoAlojamento: parseFloatSafe(getCol(row, 'Cons. Aloj')),
-            metaCrescimento1: parseFloatSafe(getCol(row, 'Meta Cresc 1')) ?? defaultMetas.metaCrescimento1,
+            metaCrescimento1: parseFloatSafe(getCol(row, 'Meta Cresc 1')) ?? metas.metaCrescimento1,
             consumoCrescimento1: parseFloatSafe(getCol(row, 'Cons. Cresc 1')),
-            metaCrescimento2: parseFloatSafe(getCol(row, 'Meta Cresc 2')) ?? defaultMetas.metaCrescimento2,
+            metaCrescimento2: parseFloatSafe(getCol(row, 'Meta Cresc 2')) ?? metas.metaCrescimento2,
             consumoCrescimento2: parseFloatSafe(getCol(row, 'Cons. Cresc 2')),
-            metaCrescimento3: parseFloatSafe(getCol(row, 'Meta Cresc 3')) ?? defaultMetas.metaCrescimento3,
+            metaCrescimento3: parseFloatSafe(getCol(row, 'Meta Cresc 3')) ?? metas.metaCrescimento3,
             consumoCrescimento3: parseFloatSafe(getCol(row, 'Cons. Cresc 3')),
-            metaTerminacao1: parseFloatSafe(getCol(row, 'Meta Term 1')) ?? defaultMetas.metaTerminacao1,
+            metaTerminacao1: parseFloatSafe(getCol(row, 'Meta Term 1')) ?? metas.metaTerminacao1,
             consumoTerminacao1: parseFloatSafe(getCol(row, 'Cons. Term 1')),
-            metaTerminacao2: parseFloatSafe(getCol(row, 'Meta Term 2')) ?? defaultMetas.metaTerminacao2,
+            metaTerminacao2: parseFloatSafe(getCol(row, 'Meta Term 2')) ?? metas.metaTerminacao2,
             consumoTerminacao2: parseFloatSafe(getCol(row, 'Cons. Term 2')),
-            metaAcumulada: parseFloatSafe(getCol(row, 'Meta Acum.')) ?? defaultMetas.metaAcumulada,
+            metaAcumulada: parseFloatSafe(getCol(row, 'Meta Acum.')) ?? metas.metaAcumulada,
           });
         }
       }
@@ -240,6 +244,7 @@ export const storage = {
         'Data': v.date,
         'Integrado': integrado?.name || 'Desconhecido',
         'Alojamento': integrado?.alojamentoDate || '',
+        'Tipo Lote': v.tipoLote || 'Misto',
         'Idade': toNum(v.idade) || 0,
         'Animais Alojados': toNum(v.animaisAlojados),
         'Animais Mortos': toNum(v.animaisMortos),

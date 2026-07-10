@@ -131,7 +131,7 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
 
                 if (latestVisit) {
                   if (latestVisit.consumoAcumuladoReal !== undefined && latestVisit.consumoAcumuladoReal !== null && Number(latestVisit.consumoAcumuladoReal) > 0) {
-                    const expected = getExpectedConsumption(Number(latestVisit.idade));
+                    const expected = getExpectedConsumption(Number(latestVisit.idade), latestVisit.tipoLote);
                     const realVal = Number(latestVisit.consumoAcumuladoReal);
                     const diff = realVal - expected;
                     consumoStr = `${realVal.toFixed(2)} kg`;

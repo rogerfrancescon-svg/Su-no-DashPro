@@ -102,6 +102,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
                 <th className="px-5 py-4 border-b border-slate-200">Data</th>
                 <th className="px-5 py-4 border-b border-slate-200">Integrado</th>
                 <th className="px-5 py-4 border-b border-slate-200">Alojamento</th>
+                <th className="px-5 py-4 border-b border-slate-200">Tipo Lote</th>
                 <th className="px-5 py-4 border-b border-slate-200">Idade</th>
                 <th className="px-5 py-4 border-b border-slate-200">Animais Alojados</th>
                 <th className="px-5 py-4 border-b border-slate-200">Animais Mortos</th>
@@ -135,7 +136,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
                 </tr>
               ) : filteredVisits.map((v) => {
                 const integrado = integrados.find(i => i.id === v.integradoId);
-                const expected = getExpectedConsumption(v.idade);
+                const expected = getExpectedConsumption(v.idade, v.tipoLote);
 
                 return (
                   <tr key={v.id} className="hover:bg-slate-50 transition-colors">
@@ -144,6 +145,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
                     }</td>
                     <td className="px-5 py-4 font-medium text-slate-800">{integrado?.name || 'Desconhecido'}</td>
                     <td className="px-5 py-4 whitespace-nowrap text-slate-600">{integrado?.alojamentoDate ? new Date(Number(integrado.alojamentoDate.split('-')[0]), Number(integrado.alojamentoDate.split('-')[1]) - 1, Number(integrado.alojamentoDate.split('-')[2])).toLocaleDateString('pt-BR') : '-'}</td>
+                    <td className="px-5 py-4 whitespace-nowrap"><span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">{v.tipoLote || 'Misto'}</span></td>
                     <td className="px-5 py-4 whitespace-nowrap">{v.idade}</td>
                     <td className="px-5 py-4 whitespace-nowrap">{v.animaisAlojados ?? '-'}</td>
                     <td className="px-5 py-4 whitespace-nowrap">{v.animaisMortos ?? '-'}</td>

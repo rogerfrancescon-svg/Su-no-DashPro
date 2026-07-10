@@ -1,5 +1,5 @@
 import { Integrado, Visit } from '../types';
-import { defaultMetas } from '../data';
+import { defaultMetas, defaultMetasFemea } from '../data';
 
 export interface PreProcessedData {
   integrados: Integrado[];
@@ -221,7 +221,7 @@ export function preprocessImportData(rawData: string): PreProcessedData {
     const pAloj = new Date(finalAlojamentoStr + 'T12:00:00');
     const diffTime = pDate.getTime() - pAloj.getTime();
     const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-    const calculatedIdade = diffDays >= 0 ? diffDays + 1 : 1;
+    const calculatedIdade = diffDays >= 0 ? diffDays : 0;
 
     const isClosed = calculatedIdade > 120;
     name = name.trim();
@@ -257,6 +257,10 @@ export function preprocessImportData(rawData: string): PreProcessedData {
 
     let rec = getCol('recomendacao');
 
+    const tipoLoteRaw = (getCol('tipoLote') || 'Misto').trim();
+    const tipoLote = tipoLoteRaw.toLowerCase().includes('f') ? 'Fêmea' : 'Misto';
+    const metas = tipoLote === 'Fêmea' ? defaultMetasFemea : defaultMetas;
+
     visits.push({
       id: `v_${id}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${parsedCount}`,
       integradoId: id,
@@ -266,6 +270,7 @@ export function preprocessImportData(rawData: string): PreProcessedData {
       consumoAcumuladoReal: consumo,
       mortalidade: mort,
       comedouro: parsedComedouro as 'Automático' | 'Linear' | 'Misto',
+      tipoLote,
       colaborador: (getCol('colaborador') || '').trim(),
       pesoAloj: parseFloatSafe(getCol('pesoAloj')),
       pontuacaoSanitaria: parseInt((getCol('pontuacaoSanitaria') || '').trim(), 10) || undefined,
@@ -274,19 +279,19 @@ export function preprocessImportData(rawData: string): PreProcessedData {
       animaisMortos: parseFloatSafe(getCol('animaisMortos')) ?? mort,
       volumeTotalCargas: parseFloatSafe(getCol('volumeCargas')),
 
-      metaAlojamento: parseFloatSafe(getCol('metaAlojamento')) ?? defaultMetas.metaAlojamento,
+      metaAlojamento: parseFloatSafe(getCol('metaAlojamento')) ?? metas.metaAlojamento,
       consumoAlojamento: parseFloatSafe(getCol('consumoAlojamento')),
-      metaCrescimento1: parseFloatSafe(getCol('metaCrescimento1')) ?? defaultMetas.metaCrescimento1,
+      metaCrescimento1: parseFloatSafe(getCol('metaCrescimento1')) ?? metas.metaCrescimento1,
       consumoCrescimento1: parseFloatSafe(getCol('consumoCrescimento1')),
-      metaCrescimento2: parseFloatSafe(getCol('metaCrescimento2')) ?? defaultMetas.metaCrescimento2,
+      metaCrescimento2: parseFloatSafe(getCol('metaCrescimento2')) ?? metas.metaCrescimento2,
       consumoCrescimento2: parseFloatSafe(getCol('consumoCrescimento2')),
-      metaCrescimento3: parseFloatSafe(getCol('metaCrescimento3')) ?? defaultMetas.metaCrescimento3,
+      metaCrescimento3: parseFloatSafe(getCol('metaCrescimento3')) ?? metas.metaCrescimento3,
       consumoCrescimento3: parseFloatSafe(getCol('consumoCrescimento3')),
-      metaTerminacao1: parseFloatSafe(getCol('metaTerminacao1')) ?? defaultMetas.metaTerminacao1,
+      metaTerminacao1: parseFloatSafe(getCol('metaTerminacao1')) ?? metas.metaTerminacao1,
       consumoTerminacao1: parseFloatSafe(getCol('consumoTerminacao1')),
-      metaTerminacao2: parseFloatSafe(getCol('metaTerminacao2')) ?? defaultMetas.metaTerminacao2,
+      metaTerminacao2: parseFloatSafe(getCol('metaTerminacao2')) ?? metas.metaTerminacao2,
       consumoTerminacao2: parseFloatSafe(getCol('consumoTerminacao2')),
-      metaAcumulada: parseFloatSafe(getCol('metaAcumulada')) ?? defaultMetas.metaAcumulada
+      metaAcumulada: parseFloatSafe(getCol('metaAcumulada')) ?? metas.metaAcumulada
     });
 
       parsedCount++;

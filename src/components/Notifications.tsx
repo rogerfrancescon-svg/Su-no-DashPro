@@ -63,7 +63,7 @@ export function Notifications({ visits, integrados }: NotificationsProps) {
 
       // Check divergência
       if (latestVisit.consumoAcumuladoReal) {
-        const expected = getExpectedConsumption(latestVisit.idade);
+        const expected = getExpectedConsumption(latestVisit.idade, latestVisit.tipoLote);
         const diferenca = latestVisit.consumoAcumuladoReal - expected;
         if (diferenca < -5 || diferenca > 5) {
           newNotifs.push({
